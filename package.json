@@ -1,0 +1,43 @@
+{
+  "name": "@cloudsforge/journal-web",
+  "version": "2026.8.70",
+  "packageManager": "pnpm@11.9.0",
+  "private": true,
+  "description": "Forge Journal: plain-language writing about crypto, the chain and the CloudsForge ecosystem. Every page is a real file on disk, written at build time, so a reader on a slow connection and a crawler that runs no JavaScript both get the words.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node --import tsx --import @cloudsforge/ui/test-loader scripts/prerender.ts",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "assets": "node --import tsx scripts/make-assets.ts",
+    "head": "node --import tsx --import @cloudsforge/ui/test-loader scripts/sync-head.ts",
+    "test": "node --import tsx --import @cloudsforge/ui/test-loader --test test/*.test.ts"
+  },
+  "//build-loader": "--import @cloudsforge/ui/test-loader is on the PRERENDER too, not only on `test`, and for the identical reason: the script imports React components through a `link:`ed package whose own node_modules holds a second React, and Node resolves a bare specifier from the importing file's realpath. Without it the design system's modules find that second copy, share no dispatcher with ours, and the first hook throws. vite's resolve.dedupe covers the bundle; nothing covers plain Node but this.",
+  "//build": "`vite build` alone produces a bundle and ONE html file, which is the shape every other frontend in the estate ships and the wrong shape for this one. An archive earns its traffic from strangers arriving on one article from a search result or a shared link, and both of those readers are served by something that does not execute JavaScript: a link-preview fetcher never does, and a crawler that does runs it late and on a budget. So the prerender runs as part of the build rather than beside it — not as an optimisation, but so that `dist` cannot exist in a state where the routes have no files. test/prerender.test.ts asserts every route in src/lib/routes.ts got one.",
+  "//assets": "NOT part of `build`, and deliberately. It drives a real browser to screenshot html/css into the hero and card images in public/, which are then COMMITTED — so the build is hermetic and CI never downloads a browser. Re-run it by hand when the art changes; test/assets.test.ts asserts every article names a file that exists and that each card is the size a crawler expects, which is what catches an article added without one.",
+  "//test": "--import @cloudsforge/ui/test-loader is what makes `node --test` able to import @cloudsforge/ui. link: symlinks micro-ui's WORKING TREE, whose own node_modules holds the react it needs to test itself, and Node resolves a bare specifier from the importing file's REALPATH — so the design system's components find that second copy, share no dispatcher with ours, and every hook they call throws \"Cannot read properties of null (reading 'useState')\". Shipping dist did not change that: dist/index.js has the same realpath as src/index.tsx. The loader is vite's resolve.dedupe supplied to the Node test runner, which has none of its own. Delete the flag and the suite goes red, not quiet.",
+  "//": "@cloudsforge/ui is consumed from a sibling path because it is not published yet. It becomes a registry version ('^1.0.0') the day it is, and nothing else here changes — the Dockerfile's uipkg build context and the second checkout in ci.yml go with it. The specifier is link: rather than file: because link: symlinks the working tree, so an edit in the design system is visible here without a republish; pnpm PACKS a file: directory and honours its `files` field, which lists only dist, so the installed copy carries an exports map pointing at sources that were never packed and every import of @cloudsforge/ui/tokens.css fails at build time. JSON has no comment syntax, hence this key — and it has to be a TOP-LEVEL key, because pnpm 11 validates every name inside `dependencies` and refuses to install a package that has a comment in there.",
+  "dependencies": {
+    "@cloudsforge/ui": "link:../ui/packages/ui",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "happy-dom": "^20.11.1",
+    "playwright-core": "1.62.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}

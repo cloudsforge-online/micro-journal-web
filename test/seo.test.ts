@@ -1,0 +1,399 @@
+/**
+ * What a crawler and a link-preview fetcher are told, and the three places it is written.
+ *
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * ON EVERY OTHER SURFACE THIS FILE GUARDS A SENTENCE. HERE IT GUARDS THE PRODUCT.
+ *
+ * A search result is not a channel this publication uses; it is the front door. Nobody navigates to
+ * an archive of five essays — they arrive on ONE of them, from a search, from a link somebody sent
+ * them in a chat window. So the title, the description and the card are not metadata about the
+ * page: for most readers they ARE the page, and the page is what they get if those three worked.
+ *
+ * That is why this repository prerenders at all, and why the checks below are shaped differently
+ * from their ancestors on `exchange-web` and `pool-web`. Those surfaces have ONE head, written once
+ * in `index.html`, and the only thing that can go wrong is that it drifts from the constant beside
+ * it. This one has FORTY-ODD, one per file `scripts/prerender.ts` writes, and the thing that goes
+ * wrong is subtler and completely invisible from inside a browser: every article shows a stranger
+ * the archive's title and the archive's card. Nothing errors. Nothing looks wrong to us. The links
+ * simply stop working as links, in somebody else's chat window, for as long as it takes to notice.
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * ── THE NON-MAINNET HOSTNAMES REFUSE EVERY CRAWLER, AND THAT MATTERS MORE HERE ────────────────
+ *
+ * Two deployments of one image on two hostnames. On the exchange the argument was danger — a
+ * stranger landing on the testnet copy signs a real transaction for worthless coins. Here it is
+ * arithmetic, and it is worse in one specific way: an essay contains no chain data, so the mainnet
+ * and testnet archives are not similar pages, they are THE SAME PAGE at two addresses. That is
+ * textbook duplicate content, a search engine picks one canonical and suppresses the other, and
+ * which one it picks is not ours to decide. `Disallow: /` on every non-mainnet hostname settles the
+ * question before it is asked, so the labels nginx recognises are checked against the registry's
+ * own `ENV_LABELS` rather than trusted.
+ */
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { ENV_LABELS } from '@cloudsforge/ui/surfaces'
+import { ARTICLES, articlesByTag } from '../src/content/index.ts'
+import { TAGS } from '../src/content/tags.ts'
+import { SURFACE_DESCRIPTION } from '../src/lib/hosts.ts'
+import { pageEntries } from '../src/lib/heads.ts'
+import { HEAD_END, HEAD_START, ORIGIN_PLACEHOLDER, renderHead } from '../src/lib/meta.ts'
+import { journalSitemap, robotsTxt, sitemapXml } from '../src/lib/syndication.ts'
+import { read, stripComments } from './sources.ts'
+
+/** RAW, not stripped: the two markers this file's first test looks between ARE HTML comments. */
+const INDEX_HTML = read('index.html')
+const HTML = stripComments(INDEX_HTML, 'html')
+const NGINX = stripComments(read('nginx.conf'), 'nginx')
+
+/**
+ * One `location` block, whole.
+ *
+ * Brace-counted rather than sliced to the next `}`, which is the version that silently returns four
+ * lines: `types { }` closes before the location does, and every check below it then passes over a
+ * fragment. That failure is invisible — the assertions still run, against nothing.
+ */
+function locationBlock(path: string): string {
+  const start = NGINX.indexOf(`location = ${path} {`)
+  assert.notEqual(start, -1, `nginx.conf has no location for ${path}`)
+  let depth = 0
+  for (let i = start; i < NGINX.length; i += 1) {
+    if (NGINX[i] === '{') depth += 1
+    else if (NGINX[i] === '}') {
+      depth -= 1
+      if (depth === 0) return NGINX.slice(start, i + 1)
+    }
+  }
+  throw new Error(`the location for ${path} is unclosed`)
+}
+
+/** The block `scripts/prerender.ts` replaces, exactly as committed. */
+function committedHead(): string {
+  const start = INDEX_HTML.indexOf(HEAD_START)
+  const end = INDEX_HTML.indexOf(HEAD_END)
+  assert.ok(start !== -1 && end > start, 'index.html has lost one of the cf:head markers')
+  return INDEX_HTML.slice(start + HEAD_START.length, end)
+    .replace(/^\r?\n/, '')
+    .replace(/\s+$/, '')
+}
+
+test('THE HEAD COMMITTED IN index.html IS THE ONE THE PRERENDER WOULD WRITE', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // The check that keeps the DEV server honest.
+  //
+  // `vite dev` serves `index.html` unmodified — the prerender is a build step — so the head a
+  // developer sees for months is the one committed here, and the head every reader sees is the one
+  // `renderHead()` produces. Nothing compares them at runtime. A head that only exists in
+  // production is a head nobody looks at until it is wrong, and this surface's whole output is
+  // heads.
+  //
+  // Byte for byte, including the indent, because the alternative — parsing both sides and comparing
+  // tag sets — is a second implementation of the thing under test. `lib/meta.ts` documents the fixed
+  // shape this depends on and package.json records why nothing reformats generated markup.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const entry = pageEntries().find((page) => page.path === '/')
+  assert.ok(entry, 'pageEntries() no longer writes the archive')
+  assert.equal(
+    committedHead(),
+    renderHead(entry.head),
+    'index.html and renderHead() disagree. Re-run `pnpm build` and paste the head from ' +
+      'dist/index.html between the two cf:head markers, or fix the builder — but do not edit one ' +
+      'side alone: the dev server serves this file and every reader gets the other.',
+  )
+})
+
+test('THE STATIC DESCRIPTION IS BYTE-IDENTICAL TO THE ONE REACT WRITES', () => {
+  // The attribute is on one line, but the value is unwrapped before comparison anyway — the bytes
+  // that matter are the ones a fetcher receives, not the ones in the file.
+  const raw = /<meta\s+name="description"\s+content="([\s\S]*?)"\s*\/>/.exec(HTML)?.[1]
+  assert.ok(raw, 'index.html has no description meta')
+  assert.equal(
+    raw.replace(/\s+/g, ' ').trim(),
+    SURFACE_DESCRIPTION,
+    'index.html and SURFACE_DESCRIPTION disagree. A link-preview fetcher does not run JavaScript, ' +
+      'so it reads only the static one; a crawler that does run it reads only the other. The ' +
+      'difference between them is a sentence nobody is reading.',
+  )
+
+  // And the sentence makes the two promises a stranger is actually guarding against, in the order
+  // a truncated search result preserves. Somebody who searches a crypto question and sees a result
+  // from a company that sells crypto has already decided what this is; the description is the only
+  // thing on the page that gets to argue, and it has about eight words in which to do it.
+  assert.match(SURFACE_DESCRIPTION, /^Plain-language crypto writing/)
+  assert.match(SURFACE_DESCRIPTION, /No jargon, no price talk, nothing to sign up for\.$/)
+
+  // The og card carries the same sentence, and that is not a duplication to tidy up: the card is
+  // read WITHOUT the surrounding page, in a chat window, next to links to services that do hold
+  // people's money. `metaTags()` upstream composes both from one value, so this asserts the
+  // composition rather than a copy.
+  const og = /property="og:description"\s+content="([\s\S]*?)"/.exec(HTML)?.[1]?.replace(/\s+/g, ' ')
+  assert.equal(og, SURFACE_DESCRIPTION)
+})
+
+test('EVERY PAGE CARRIES ITS OWN TITLE, ITS OWN SENTENCE AND ITS OWN PICTURE', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // THE DEFECT THIS SURFACE EXISTS TO AVOID, ASSERTED DIRECTLY.
+  //
+  // A single shared head is what a client-rendered archive ships by default, and it is invisible
+  // from inside a browser — the reader sees the right article, because React ran. What a crawler
+  // and every link-preview fetcher see is five copies of the archive's title, five copies of its
+  // description and five copies of its card. The articles are then not merely unshareable, they are
+  // duplicate content in each other's way.
+  //
+  // Checked over `pageEntries()` rather than over `dist`, so it fails in the two seconds before a
+  // build rather than after one — and `test/prerender.test.ts` is what ties `pageEntries()` to the
+  // files that actually get written.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const entries = pageEntries()
+  assert.ok(entries.length >= ARTICLES.length + 5, 'pageEntries() has lost pages')
+
+  const titles = entries.map((page) => page.head.meta.title)
+  assert.equal(new Set(titles).size, titles.length, `two pages share a title: ${titles.join(' | ')}`)
+
+  const descriptions = entries.map((page) => page.head.meta.description)
+  assert.equal(new Set(descriptions).size, descriptions.length, 'two pages share a description')
+  assert.deepEqual(
+    entries.filter((page) => page.head.meta.description === SURFACE_DESCRIPTION).map((p) => p.path),
+    ['/'],
+    'a page other than the archive is describing itself with the surface default',
+  )
+
+  // Every article's card is its own file. The default share card is the FALLBACK for the pages that
+  // have no artwork — the archive, topics, about, search — and an article falling back to it is the
+  // exact symptom above, one step short of it.
+  for (const article of ARTICLES) {
+    const page = entries.find((entry) => entry.path === `/a/${article.slug}`)
+    assert.ok(page, `${article.slug} has no page entry`)
+    assert.equal(page.head.meta.image, article.card)
+    assert.match(article.card, new RegExp(`^/articles/${article.slug}/card\\.png$`))
+    assert.equal(page.head.kind, 'article', 'an article is not og:type article')
+  }
+  for (const path of ['/', '/topics', '/about', '/search', '/404']) {
+    const page = entries.find((entry) => entry.path === path)
+    assert.ok(page, `${path} has no page entry`)
+    assert.equal(page.head.meta.image, '/og-1200x630.png')
+    assert.equal(page.head.kind, 'website', `${path} claims to be an article`)
+  }
+})
+
+test('THE ABSOLUTE URLs ARE A PLACEHOLDER, IN EVERY TAG THAT NEEDS ONE', () => {
+  // A canonical, an `og:url`, an `og:image` and every JSON-LD `@id` must be absolute — no standard
+  // accepts a relative one, and the fetchers that read og:image mostly do not resolve one at all.
+  // At build time there is no host, so the placeholder is what gets written and nginx substitutes
+  // `$scheme://$host` per request.
+  //
+  // The failure this catches is the one that does not look like a failure: a baked-in host renders
+  // perfectly and quietly tells every search engine that the real copy of this article lives on
+  // another origin. A preview deployment then claims to be production, and the testnet archive
+  // de-indexes itself in favour of a host the reader was never on.
+  assert.equal(ORIGIN_PLACEHOLDER, '__CF_ORIGIN__')
+  for (const page of pageEntries()) {
+    const rendered = renderHead(page.head)
+    assert.doesNotMatch(rendered, /cloudsforge\.online/, `${page.path} names a hostname`)
+    assert.doesNotMatch(rendered, /localhost/, `${page.path} names localhost`)
+    for (const attribute of ['og:url', 'og:image', 'twitter:image']) {
+      const value = new RegExp(`"${attribute}" content="([^"]*)"`).exec(rendered)?.[1]
+      assert.ok(value?.startsWith(ORIGIN_PLACEHOLDER), `${page.path} has a relative ${attribute}`)
+    }
+    assert.match(rendered, /<link rel="canonical" href="__CF_ORIGIN__\//)
+  }
+})
+
+test('THE SEARCH PAGE AND THE 404 ARE noindex, AND NOTHING ELSE IS', () => {
+  // Search results are generated from a string somebody typed, so indexing them files every typo
+  // and every scraped query as a page of this publication — which is how an archive of forty pages
+  // becomes an archive of four thousand and then gets treated as one. The 404 is `noindex` because
+  // it is not a page.
+  //
+  // `follow` on both, and that is the half that is easy to get wrong. A crawler that lands on either
+  // should still be passed along to the real pages linked from it; `nofollow` would strand the whole
+  // archive behind whichever dead end it happened to arrive at.
+  // ONE call, held. `pageEntries()` builds fresh objects every time, so filtering one call and
+  // testing membership against another compares identities that can never match — the second loop
+  // then asserts `index, follow` over the two pages that are deliberately `noindex`. It failed
+  // loudly here; the version of this mistake that does not is a `.filter()` that silently keeps
+  // everything, and that is the one worth leaving a note about.
+  const entries = pageEntries()
+  const noindex = entries.filter((page) => page.head.meta.robots.startsWith('noindex'))
+  assert.deepEqual(noindex.map((page) => page.path).sort(), ['/404', '/search'])
+  for (const page of noindex) assert.equal(page.head.meta.robots, 'noindex, follow')
+
+  for (const page of entries) {
+    if (noindex.includes(page)) continue
+    assert.equal(page.head.meta.robots, 'index, follow, max-image-preview:large', page.path)
+  }
+
+  // `max-image-preview:large` is the registry's default and it is worth more here than anywhere
+  // else in the estate: it is what lets a search result show the article's own card at full width
+  // instead of a thumbnail. Every article has one, drawn by `scripts/make-assets.ts`.
+  assert.match(HTML, /<meta name="robots" content="index, follow, max-image-preview:large" \/>/)
+})
+
+test('no page hands a head builder a literal', () => {
+  // Each description is an exported constant shared by the page that renders it and by
+  // `lib/heads.ts`, which is what the prerender consumes. A literal in either place is a second
+  // copy of a sentence, and the copy that goes stale is always the one nobody is reading — here,
+  // whichever of the two a link-preview fetcher happens to get.
+  for (const page of ['about', 'home', 'not-found', 'search', 'topics', 'topic', 'article']) {
+    const source = stripComments(read(`src/pages/${page}.tsx`), 'ts')
+    assert.doesNotMatch(
+      source,
+      /Head\(\s*['"`]/,
+      `src/pages/${page}.tsx passes a literal to a head builder instead of a shared constant`,
+    )
+  }
+})
+
+test('THE ENVIRONMENT LABELS NGINX KNOWS ARE THE REGISTRY’S OWN', () => {
+  // The alternation in the `map` decides which hostnames refuse every crawler. A label the registry
+  // reserves and nginx does not know is a second archive competing with mainnet for the search
+  // result of every article in it.
+  const map = /~\^\(\?:\[\^.\]\+-\)\?\(\?:([a-z|]+)\)\\\./.exec(NGINX)?.[1]
+  assert.ok(map, 'nginx.conf has no environment map, or its shape has changed')
+  assert.deepEqual(
+    map.split('|').sort(),
+    [...ENV_LABELS].sort(),
+    'nginx.conf and @cloudsforge/ui/surfaces disagree about which first labels name an environment',
+  )
+})
+
+test('the environment map catches BOTH hostname shapes', () => {
+  // `(?:[^.]+-)?` is what makes it match `journal-testnet.<apex>` as well as `testnet.<apex>`, for
+  // the same reason `splitEnvLabel()` upstream resolves both: the environment is a suffix on the
+  // first label now and was an apex prefix before. Environment-as-suffix exists because Cloudflare's
+  // SSL wildcard matches exactly ONE label, so `journal.testnet.<apex>` has no certificate at all.
+  assert.match(NGINX, /\(\?:\[\^\.\]\+-\)\?/)
+})
+
+test('a non-mainnet hostname has no sitemap, no feed, and refuses every crawler', () => {
+  assert.match(locationBlock('/feed.xml'), /if \(\$cf_env\) \{ return 404; \}/)
+  assert.match(locationBlock('/sitemap.xml'), /if \(\$cf_env\) \{ return 404; \}/)
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // WRITTEN ACROSS REAL LINES, AND THIS ASSERTION IS THE ONE THAT LOOKS LIKE A TYPO.
+  //
+  // nginx does not process backslash escapes inside a quoted string; it emits the two characters.
+  // `'User-agent: *\nDisallow: /\n'` therefore produces a ONE-LINE file reading
+  // `User-agent: *\nDisallow: /\n` literally, in which a strict parser sees one unknown directive
+  // and no `Disallow` at all — so the hostname that was supposed to refuse every crawler invites
+  // them. exchange-web shipped exactly that, harmlessly, because its `Disallow: /` is on the same
+  // line as the junk. Copying it here is the obvious tidy-up, so the shape is pinned in both
+  // directions.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  assert.match(
+    locationBlock('/robots.txt'),
+    /if \(\$cf_env\) \{ return 200 'User-agent: \*\nDisallow: \/\n'; \}/,
+  )
+  // Across the WHOLE file, not just this block. `location = /healthz` had the same defect — a probe
+  // answered `ok\n` with a literal backslash in it — ten lines under the comment explaining why not
+  // to, which is how a rule that lives only in prose gets broken by the person who wrote it.
+  assert.doesNotMatch(
+    NGINX,
+    /return\s+\d+\s+['"][^'"]*\\n/,
+    'a backslash-n in an nginx string is two characters, not a newline',
+  )
+})
+
+test('THE SITEMAP AND robots.txt ARE FILES THE BUILD WROTE, NOT STRINGS NGINX COMPOSES', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // The inversion of what every other surface in the estate does, and the reason is the corpus.
+  //
+  // Elsewhere a sitemap is a `return 200` string of five fixed paths, and composing it in nginx is
+  // right: nginx is the component that knows `$host`. Here it has one entry per ARTICLE and per
+  // TOPIC, each with a `lastmod` taken from that article's own front matter — facts that live in
+  // `src/content/` and that nginx cannot know. A hand-maintained list in this file would be a list
+  // somebody has to remember, and the thing they would forget is the article they just published.
+  //
+  // So `scripts/prerender.ts` writes both, from the content, and they get `$host` from the same
+  // `sub_filter` as everything else.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const sitemap = NGINX.slice(NGINX.indexOf('location = /sitemap.xml'), NGINX.indexOf('location = /robots.txt'))
+  assert.doesNotMatch(sitemap, /<loc>/, 'the sitemap is composed in nginx again')
+  assert.doesNotMatch(sitemap, /return 200/)
+  assert.doesNotMatch(NGINX, /cloudsforge\.online/)
+
+  const xml = sitemapXml(journalSitemap(ARTICLES, TAGS, '2026-08-17'), ORIGIN_PLACEHOLDER)
+  const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1] ?? '')
+  for (const loc of locs) assert.ok(loc.startsWith(`${ORIGIN_PLACEHOLDER}/`), `${loc} is relative`)
+
+  const paths = locs.map((loc) => loc.slice(ORIGIN_PLACEHOLDER.length))
+  const populated = TAGS.filter((tag) => articlesByTag(tag.slug).length > 0)
+  assert.deepEqual(
+    paths.sort(),
+    [
+      '/',
+      '/topics',
+      '/about',
+      ...populated.map((tag) => `/topics/${tag.slug}`),
+      ...ARTICLES.map((article) => `/a/${article.slug}`),
+    ].sort(),
+  )
+
+  // A sitemap is an INVITATION, so the two `noindex` pages are not in it. Inviting a crawler to a
+  // page that then tells it to leave is the sort of contradiction that gets a whole sitemap
+  // discounted, and it costs an archive its only mechanical way of announcing itself.
+  assert.ok(!paths.includes('/search') && !paths.includes('/404'))
+  // Every entry carries a real day rather than the moment of the build. `<lastmod>` moving on every
+  // deploy of every article at once is how a crawler learns to stop believing it.
+  assert.equal([...xml.matchAll(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)].length, locs.length)
+
+  const txt = robotsTxt(ORIGIN_PLACEHOLDER)
+  assert.match(txt, /^User-agent: \*\nAllow: \/\nDisallow: \/search\n/)
+  assert.match(txt, /\nSitemap: __CF_ORIGIN__\/sitemap\.xml\n/)
+})
+
+test('THE THREE MACHINE-READABLE FILES ARE INSIDE sub_filter_types', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // The one-line omission that would ship every absolute URL in this repository as the literal
+  // string `__CF_ORIGIN__`.
+  //
+  // `sub_filter_types` defaults to `text/html` ALONE. The feed, the sitemap and robots.txt are the
+  // three responses whose entire content is absolute URLs, and each declares its own `default_type`
+  // precisely so nginx does not guess — which also takes all three out of the default. A feed whose
+  // every `<link>` reads `__CF_ORIGIN__/a/…` is not a feed with a cosmetic problem; it is a
+  // subscription in which no article can be opened.
+  //
+  // Derived from the file rather than listed here, so a location that changes its content type
+  // fails this instead of quietly falling out of the filter.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const declared = /sub_filter_types ([^;]+);/.exec(NGINX)?.[1]?.split(/\s+/)
+  assert.ok(declared, 'nginx.conf no longer declares sub_filter_types')
+  assert.ok(declared.includes('text/html'), 'text/html is implicit but is listed for the reader')
+
+  for (const location of ['/feed.xml', '/sitemap.xml', '/robots.txt']) {
+    const block = locationBlock(location)
+    // `types { }` empties the mime table FOR THIS LOCATION so `default_type` is what applies.
+    // Without it nginx maps the extension in the URI to its own table and the `default_type` line
+    // is inert — a declaration that reads as a decision and is not one.
+    assert.match(block, /types \{ \}/, `${location} lets nginx guess its content type`)
+    const type = /default_type ([^;]+);/.exec(block)?.[1]
+    assert.ok(type, `${location} declares no default_type`)
+    assert.ok(
+      declared.includes(type),
+      `${location} is served as ${type}, which sub_filter_types does not cover — its ` +
+        `__CF_ORIGIN__ placeholders would ship raw`,
+    )
+  }
+
+  // AND WHAT IS ABSENT. `gzip_static` is the obvious optimisation for a directory of static files
+  // and it would silently defeat every substitution above: a pre-compressed `.gz` is passed through
+  // untouched, because the filter runs on the response body and cannot see inside a deflate stream.
+  // nginx's ordinary `gzip` is applied AFTER the filter and is safe. Nobody guesses that difference
+  // correctly, which is why it is a test rather than a comment.
+  assert.doesNotMatch(NGINX, /gzip_static/)
+  assert.match(NGINX, /sub_filter_once off;/)
+})
+
+test('this surface asks to be indexed', () => {
+  // The opposite of the operator console, and the one surface in the estate where being found IS
+  // the function. `X-Robots-Tag: noindex` is a header that would quietly cause the reverse of that
+  // while every meta tag in the bundle still said `index, follow`.
+  assert.doesNotMatch(NGINX, /X-Robots-Tag/i)
+
+  // And the feed is declared where a reader's browser and their feed reader both look for it —
+  // relative, because it resolves against whichever origin served the page. It is the only
+  // subscription this publication offers; there is no mailing list to fall back on.
+  assert.match(
+    HTML,
+    /<link rel="alternate" type="application\/rss\+xml" title="Forge Journal" href="\/feed\.xml" \/>/,
+  )
+})

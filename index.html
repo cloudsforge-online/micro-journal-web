@@ -1,0 +1,149 @@
+<!doctype html>
+<!--
+  data-cf-product picks the accent ramp and data-cf-substrate the ash ramp, both from
+  @cloudsforge/ui/tokens.css. They are on <html> and set STATICALLY here rather than by React,
+  because a page that paints before the attributes land flashes the default ember and then changes
+  colour.
+
+  'journal' — and this was checked rather than assumed.
+
+  tokens.css declares a real `[data-cf-product='journal']` block, added on 2026-08-17 with the
+  registry row. Naming a product with no block would fall through to the company ember in complete
+  silence, which tokens.css calls out by name — "a silent fallthrough is a latent bug, so every key
+  an app may set is declared". `admin` had that defect and `explorer` still does.
+  test/brand-chrome.test.ts asserts that the selector this file names really exists upstream, which
+  is the check that catches a fall-through either way.
+
+  'warm' is the ash ramp every product frontend in the estate uses.
+
+  data-cf-scheme is the third of the three: `auto` follows the reader's operating system. It earns
+  its place on this surface more than on most — a long read is the one thing on the estate somebody
+  does at night, and a page that ignores a system-wide dark preference is a page they leave.
+-->
+<html lang="en-GB" data-cf-product="journal" data-cf-substrate="warm" data-cf-scheme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      `color-scheme`, spelled the way the standard spells it and not the way English does. It is not
+      a registered meta name under any other spelling, so a misspelling is inert rather than wrong —
+      explorer-web shipped `colour-scheme` for months and the browser drew light form controls on a
+      dark page the whole time.
+
+      Both schemes, because data-cf-scheme="auto" above lets the token layer resolve whichever
+      palette the reader's system asks for; declaring only `dark` would leave the chrome the browser
+      draws disagreeing with the page around it.
+    -->
+    <meta name="color-scheme" content="dark light" />
+    <!--
+      The build that produced this bundle. Stamped by the Dockerfile, read by src/lib/obs.ts, and
+      the reason an error report can be pinned to the deploy that introduced it. It is an identity
+      rather than a configuration: it names the artefact, it does not tell it where it is running.
+    -->
+    <meta name="cf-release" content="dev" />
+    <!--
+      THE GOOGLE ANALYTICS MEASUREMENT ID, AND NOT THE GOOGLE ANALYTICS TAG.
+      ────────────────────────────────────────────────────────────────────────────────────────
+      There is deliberately no third-party analytics `<script src=…>` in this file and there must
+      never be one. The stock snippet fetches that script and sets a cookie on load, before any
+      banner has been drawn let alone answered; under ePrivacy Art. 5(3) an analytics cookie set
+      before consent is a violation that a banner underneath it does not cure.
+      `@cloudsforge/ui/consent` injects the tag from exactly one place: the Accept button in
+      `CookieBanner`.
+
+      It matters here for a reason particular to a publication. A page view on this surface reports
+      the TITLE OF SOMETHING SOMEBODY READ, which is a more intimate fact than a page view usually
+      is — "Nine ways people lose crypto" attached to a browser says something about that reader
+      that a pool address does not. An archive that reports it before asking is a worse trade than
+      an archive with no numbers.
+
+      It is a meta tag rather than a build-time variable because test/no-build-time-config.test.ts
+      greps for those and fails the build — an artefact with an environment frozen into it is not
+      the artefact that passed CI. It is the same mechanism `cf-release` above already uses. An
+      absent or empty value means analytics is simply off, which is what a local `pnpm dev` gets.
+    -->
+    <meta name="cf-analytics" content="G-ZFBLKK519K" />
+
+    <!--
+      Brand chrome copied BYTE-IDENTICAL from brand/assets/site/ — test/brand-chrome.test.ts
+      compares the bytes in both directions.
+
+      THE COMPANY'S SET, NOT ANOTHER PRODUCT'S, AND THAT IS THE DECISION.
+
+      micro-brand has no `journal` set: there is no brand/assets/journal/ directory and no `journal`
+      entry in brand/plan.ts. Generating one from a frontend repository is the one place brand
+      assets must never come from, so something has to be borrowed — and every remaining candidate
+      except the parent is ANOTHER PRODUCT'S MARK, which on a publication would be a claim about who
+      is speaking. The journal writes about the whole estate and about crypto in general, sometimes
+      critically; the honest signature on that is the company's own ridge-and-flame.
+
+      test/brand-chrome.test.ts asserts that brand/assets/journal/ does NOT exist, so the day
+      micro-brand generates one is the day a test tells somebody to come back here.
+
+      THERE IS NO MARK AND NO WORDMARK. Favicons and an og card are the two artefacts a separate
+      hostname needs, because "a browser tab and a shared link inherit nothing" (brand/plan.ts).
+      Nothing here links a mark, nothing in src renders one, and the test asserts the absence so that
+      adding one later is a decision rather than a reflex.
+
+      The per-article cards are a different class of thing and live in public/cards/ — they are
+      CONTENT, drawn from the article's own title by scripts/make-assets.ts, not brand marks.
+    -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512x512.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192x192.png" />
+
+    <!--
+      The feed, declared where a reader's browser extension and a feed reader both look for it.
+      Relative, because it resolves against whichever origin served the page — the same rule the
+      rest of this bundle follows, and the reason nothing below it can be.
+    -->
+    <link rel="alternate" type="application/rss+xml" title="Forge Journal" href="/feed.xml" />
+
+    <!--
+      ══════════════════════════════════════════════════════════════════════════════════════════
+      EVERYTHING BETWEEN THE TWO MARKERS BELOW IS REPLACED, PER ROUTE, BY scripts/prerender.ts.
+      ══════════════════════════════════════════════════════════════════════════════════════════
+
+      `dist/index.html` keeps exactly what is written here; `dist/a/<slug>/index.html` gets the
+      article's own title, description, card and JSON-LD in its place. That is the whole reason this
+      repository prerenders: a link-preview fetcher runs no JavaScript at all, and a crawler that
+      does runs it late — so a single shared head would mean every article on this surface shows a
+      stranger the same title and the same card, which is indistinguishable from having no cards.
+
+      The block is delimited by comments rather than assembled from nothing because the DEV server
+      serves this file unmodified, and a head that only exists in production is a head nobody looks
+      at until it is wrong. test/seo.test.ts renders the home route's meta through the same function
+      the prerender uses and asserts it equals what is written here, byte for byte.
+
+      `__CF_ORIGIN__` IS NOT A BUILD-TIME VARIABLE. It is a literal string, written to disk, that
+      nginx replaces with `$scheme://$host` per request (see nginx.conf). Absolute URLs are
+      mandatory in a canonical link, an og:url and a JSON-LD @id — and baking one in would publish
+      the mainnet host inside the testnet archive's own canonical tag, quietly de-indexing it in
+      favour of an origin the reader was never on. The placeholder is the only form that is correct
+      on every origin, including a preview deployment and a laptop.
+    -->
+    <!-- cf:head:start -->
+    <title>Forge Journal</title>
+    <meta name="description" content="Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds on its own chain. No jargon, no price talk, nothing to sign up for." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="CloudsForge" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:title" content="Forge Journal" />
+    <meta property="og:description" content="Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds on its own chain. No jargon, no price talk, nothing to sign up for." />
+    <meta property="og:url" content="__CF_ORIGIN__/" />
+    <meta property="og:image" content="__CF_ORIGIN__/og-1200x630.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Forge Journal" />
+    <meta name="twitter:description" content="Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds on its own chain. No jargon, no price talk, nothing to sign up for." />
+    <meta name="twitter:image" content="__CF_ORIGIN__/og-1200x630.png" />
+    <link rel="canonical" href="__CF_ORIGIN__/" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"__CF_ORIGIN__/#site","name":"Forge Journal","alternateName":"CloudsForge Journal","url":"__CF_ORIGIN__/","description":"Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds on its own chain. No jargon, no price talk, nothing to sign up for.","inLanguage":"en-GB","publisher":{"@type":"Organization","name":"CloudsForge","logo":{"@type":"ImageObject","url":"__CF_ORIGIN__/favicon-512x512.png","width":512,"height":512}},"potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"__CF_ORIGIN__/search?q={search_term_string}"},"query-input":"required name=search_term_string"}}</script>
+    <!-- cf:head:end -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

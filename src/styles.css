@@ -1,0 +1,1265 @@
+/*
+ * Forge Journal's own styles, on top of @cloudsforge/ui.
+ *
+ * ══════════════════════════════════════════════════════════════════════════════════════════════
+ * EVERY CUSTOM PROPERTY REFERENCED HERE IS DEFINED IN `ui/packages/ui/src/tokens.css`, AND A TEST
+ * PROVES IT.
+ *
+ * `test/tokens.test.ts` reads the sibling design system, collects every `--cf-*` this file names,
+ * and fails on one that tokens.css does not declare. That is not a style preference: an undefined
+ * custom property makes the whole declaration invalid at computed-value time, so
+ * `border: 1px solid var(--cf-undefined)` does not fall back to a sensible border — it drops the
+ * border entirely, silently, in a file that looks correct.
+ *
+ * The estate has shipped exactly that. `micro-mint-web/src/styles.css` names ten properties that do
+ * not exist — `--cf-border`, `--cf-radius-md`, `--cf-space-1` through `--cf-space-5` and
+ * `--cf-status-good`/`-warn`/`-crit` — across 72 declarations. The names that DO exist:
+ *
+ *   borders   --cf-line, --cf-line-strong             (never --cf-border)
+ *   states    --cf-good-*, --cf-warn-*, --cf-critical-*, --cf-success, --cf-danger
+ *   radii     --cf-radius-sm, --cf-radius, --cf-radius-lg   (never --cf-radius-md)
+ *   spacing   --cf-space-3xs … --cf-space-3xl         (never --cf-space-1..5)
+ *   type      --cf-font-sans, --cf-font-mono, --cf-font-display  (never --cf-font)
+ *
+ * MARK STEP AND TEXT STEP ARE DIFFERENT TOKENS. `--cf-accent`, `--cf-ember` and `--cf-warn` are
+ * validated at 3:1 — the floor for a border, a fill or a stroke; `--cf-accent-text` and
+ * `--cf-warn-text` are the 4.5:1 step for type. Every `color:` below names a `-text` step; every
+ * border, stroke and fill keeps the mark step.
+ *
+ * A `var(--undefined, #hex)` is not a repair either — it is a hard-coded colour wearing a token's
+ * clothes, and it stops following the substrate the moment somebody switches the ash ramp. There is
+ * one literal colour in this file and it is `transparent`.
+ *
+ * The same rule applies to CLASS names: a `cf-` class that does not exist upstream fails exactly as
+ * quietly as a property that does, and local classes take the `jn-` prefix so the two namespaces
+ * cannot silently merge.
+ * ══════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * ── THE DIRECTION, IN ONE PARAGRAPH ───────────────────────────────────────────────────────────
+ *
+ * This is an archive whose whole job is to be read by somebody who arrived from a search result and
+ * does not yet care about us. So the page is built around ONE COLUMN OF WORDS at a comfortable
+ * measure, in the largest body size the estate's scale carries, and everything that is not the
+ * words — the topics, the contents, the share controls, the byline — is set in the mono utility
+ * face at a size that reads as apparatus rather than as content. The display face appears once per
+ * page, on the title, and nowhere else.
+ *
+ * ── THE SIGNATURE: A RULE THAT DOES NOT STOP ──────────────────────────────────────────────────
+ *
+ * Every artwork in `scripts/make-assets.ts` is built on one horizontal line — the ledger's rows,
+ * the bench under the six tools, the baseline the blocks stand on, the flat the settling line
+ * reaches. That line is this stylesheet's only ornament, and it is always drawn the same way: a
+ * 2px bronze rule that FADES OUT to the right instead of ending, because a ledger has no last row.
+ * `--jn-rule-fade` below is the whole device. It marks the masthead, the head of every page, each
+ * section heading in the prose, and the card a reader is pointing at — and it appears nowhere else.
+ * The discipline is what makes it read as a mark rather than as decoration.
+ *
+ * Everything else that separates two things is a hairline in `--cf-line`, which is the design
+ * system's own, so this publication sits inside the estate rather than beside it.
+ */
+
+/* ---- the base layer --------------------------------------------------- */
+
+:root {
+  /*
+   * The three composed spacings, named once.
+   *
+   * The token scale stops at 32px, which is right for UI and too tight for an editorial page: a
+   * section break has to exceed a paragraph break by more than a factor of two or the eye reads the
+   * page as one undifferentiated run. These are multiples of the scale rather than new numbers, so
+   * a change to `--cf-space-3xl` still moves the whole page together.
+   */
+  --jn-gutter: var(--cf-space-3xl);
+  --jn-block: calc(var(--cf-space-3xl) * 1.5);
+  --jn-section: calc(var(--cf-space-3xl) * 2.5);
+
+  /*
+   * The apparatus column, named because THREE rules need the same number and one of them is a
+   * subtraction. It is a width rather than a fraction so the contents do not grow with the viewport
+   * — a table of contents twice as wide reads as a second column of content, and the eye starts
+   * treating it as something to read rather than something to consult.
+   */
+  --jn-aside: 14rem;
+
+  /* The signature. See the note at the top of this file. */
+  --jn-rule-fade: linear-gradient(to right, var(--cf-accent), transparent);
+
+  /* Both sticky headers, so a fragment target clears them. Read three times below. */
+  --jn-headers: calc(var(--cf-bar-h) * 2 + var(--cf-space-2xl));
+}
+
+/*
+ * The tokens are DELIVERED by tokens.css and have to be CONSUMED here.
+ *
+ * `index.html` sets `data-cf-product`/`data-cf-substrate` on `<html>` and tokens.css resolves
+ * `--cf-bg` on `:root`, but if nothing in this file ever reads those properties on `body` the
+ * document falls all the way through to the UA stylesheet — a transparent background, Times, and an
+ * 8px margin. That defect is invisible to `curl` (the surface still returns 200) and invisible to a
+ * mocked DOM test (happy-dom neither loads the stylesheet nor cascades it), and glaring to the first
+ * person who opens the page in a browser. Explorer-web shipped it once.
+ *
+ * `color-scheme` is deliberately NOT declared here. It is an inherited property, `index.html`
+ * carries `data-cf-scheme="auto"`, and tokens.css sets it on `<html>` for the whole estate; a
+ * declaration on `body` would beat the inherited one for the entire page and leave a reader on a
+ * light system with the light palette and dark native controls — the search field among them.
+ */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--cf-bg);
+  color: var(--cf-fg);
+  font-family: var(--cf-font-sans);
+  line-height: var(--cf-leading);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * `text-wrap: balance` on every heading.
+ *
+ * A two-line headline that breaks after its first word is the most common way a page that is
+ * otherwise carefully set looks careless, and it only happens at widths nobody tested. The property
+ * degrades to nothing where it is unsupported.
+ */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/*
+ * The focus ring is drawn HERE rather than left to the UA, because the UA's is a black or white
+ * outline and this page is a dark ground where black is invisible. `:focus-visible` rather than
+ * `:focus`, so a mouse click on a link does not leave a ring behind it.
+ */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--cf-accent);
+  outline-offset: 2px;
+  border-radius: var(--cf-radius-sm);
+}
+
+/* ---- the masthead ----------------------------------------------------- */
+
+/*
+ * It sticks BELOW the estate bar, not at the top of the viewport.
+ *
+ * `CloudsForgeBar` is `position: sticky; top: 0; z-index: 60` in the design system, so a masthead
+ * that also sticks at zero slides under it and the publication's name disappears the moment a
+ * reader scrolls. `--cf-bar-h` is the token the bar sizes itself with; reading it here is what keeps
+ * the two in step when it changes, as it did once already (46px → 54px).
+ */
+.jn-masthead {
+  position: sticky;
+  top: var(--cf-bar-h);
+  z-index: 30;
+  background: var(--cf-bg);
+  border-bottom: 1px solid var(--cf-line);
+}
+
+/* The signature rule, sitting on the hairline: the page's first bronze mark. */
+.jn-masthead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--jn-rule-fade);
+}
+
+.jn-masthead__inner {
+  max-width: var(--cf-max-w);
+  margin: 0 auto;
+  padding: var(--cf-space-lg) var(--cf-space-2xl);
+  display: flex;
+  align-items: baseline;
+  gap: var(--cf-space-2xl);
+}
+
+/*
+ * The nameplate. One of the two places on a listing page the display face appears, set tight and
+ * heavy so it reads as a masthead rather than as the link that happens to come first.
+ */
+.jn-masthead__name {
+  font-family: var(--cf-font-display);
+  font-weight: 700;
+  font-size: var(--cf-text-xl);
+  letter-spacing: var(--cf-tracking-tight);
+  line-height: var(--cf-leading-tight);
+  color: var(--cf-fg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.jn-masthead__name:hover {
+  color: var(--cf-accent-text);
+}
+
+.jn-masthead__spacer {
+  flex: 1 1 auto;
+}
+
+.jn-nav {
+  display: flex;
+  gap: var(--cf-space-xl);
+}
+
+/*
+ * The apparatus face: mono, uppercase, wide-tracked, small.
+ *
+ * Every navigational or measured thing on this surface is set this way — the nav, the topic chips,
+ * the byline, the contents, the counts — so a reader can tell at a glance what is the publication
+ * talking and what is the publication being read.
+ */
+.jn-nav__link,
+.jn-masthead__action {
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-mute);
+  text-decoration: none;
+  padding-bottom: var(--cf-space-2xs);
+  border-bottom: 1px solid transparent;
+  transition: color var(--cf-speed) var(--cf-ease);
+}
+
+.jn-nav__link:hover,
+.jn-masthead__action:hover {
+  color: var(--cf-fg);
+}
+
+/* The current section is marked with the rule, not with a colour: colour is spent on the art. */
+.jn-nav__link--current {
+  color: var(--cf-fg);
+  border-bottom-color: var(--cf-accent);
+}
+
+/* ---- the page frame --------------------------------------------------- */
+
+.jn-main {
+  max-width: var(--cf-max-w);
+  margin: 0 auto;
+  padding: var(--jn-block) var(--cf-space-2xl) var(--jn-section);
+}
+
+/* ---- the home page ---------------------------------------------------- */
+
+.jn-hero {
+  padding-bottom: var(--jn-block);
+  margin-bottom: var(--jn-block);
+  border-bottom: 1px solid var(--cf-line);
+}
+
+.jn-hero__eyebrow {
+  margin: 0 0 var(--cf-space-xl);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-accent-text);
+}
+
+/*
+ * `clamp()` between two real steps of the scale rather than a raw viewport unit, so the title is
+ * never smaller than a section heading on a phone and never larger than a page title on a desk. The
+ * estate reserves `--cf-text-5xl` for the marketing site, and an archive is not that.
+ */
+.jn-hero__title {
+  margin: 0;
+  max-width: 22ch;
+  font-family: var(--cf-font-display);
+  font-weight: 700;
+  font-size: clamp(var(--cf-text-3xl), 6vw, var(--cf-text-4xl));
+  line-height: var(--cf-leading-tight);
+  letter-spacing: var(--cf-tracking-tight);
+}
+
+.jn-hero__standfirst {
+  margin: var(--cf-space-xl) 0 0;
+  max-width: var(--cf-measure);
+  font-size: var(--cf-text-lg);
+  color: var(--cf-fg-dim);
+}
+
+.jn-lead {
+  margin-bottom: var(--jn-block);
+}
+
+/*
+ * The listing grid. `auto-fill` with a floor rather than a fixed column count, because the number of
+ * articles is content and the number of columns is a consequence of the width — a media query here
+ * would have to be re-tuned every time the measure or the gutter moved.
+ */
+.jn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  gap: var(--jn-block) var(--jn-gutter);
+}
+
+/* ---- a card ----------------------------------------------------------- */
+
+.jn-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cf-space-xl);
+}
+
+.jn-card__thumb {
+  display: block;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius);
+  overflow: hidden;
+  background: var(--cf-bg-sunken);
+}
+
+.jn-card__img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  transition: opacity var(--cf-speed) var(--cf-ease);
+}
+
+.jn-card:hover .jn-card__img {
+  opacity: 0.86;
+}
+
+.jn-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cf-space-md);
+}
+
+.jn-card__title {
+  margin: 0;
+  font-family: var(--cf-font-display);
+  font-weight: 600;
+  font-size: var(--cf-text-xl);
+  line-height: var(--cf-leading-tight);
+  letter-spacing: var(--cf-tracking-tight);
+}
+
+/*
+ * The headline underline is the signature rule, grown from zero on hover.
+ *
+ * It is a background rather than a `text-decoration` because a decoration cannot be a gradient, and
+ * the fade is the point: the mark under a headline behaves like every other rule on the page.
+ */
+.jn-card__link {
+  color: var(--cf-fg);
+  text-decoration: none;
+  background-image: var(--jn-rule-fade);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0 2px;
+  transition: background-size var(--cf-speed) var(--cf-ease);
+}
+
+.jn-card__link:hover,
+.jn-card__link:focus-visible {
+  background-size: 100% 2px;
+}
+
+.jn-card__dek {
+  margin: 0;
+  color: var(--cf-fg-dim);
+  font-size: var(--cf-text-md);
+}
+
+.jn-card__meta,
+.jn-card__tags {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cf-space-sm);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-mute);
+}
+
+/*
+ * THE LEAD CARD IS THE SHARE CARD.
+ *
+ * `scripts/make-assets.ts` composes every article's 1200×630 image as words on the left and the
+ * artwork in a panel on the right. This is that composition, at page scale and in live type — so
+ * the object a reader saw in a chat app and the object they land on are recognisably the same one.
+ * It is the only place the two halves of the design meet, which is why the newest piece gets it and
+ * nothing else does.
+ */
+.jn-card--lead {
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: var(--jn-gutter);
+  padding-bottom: var(--jn-block);
+  border-bottom: 1px solid var(--cf-line);
+}
+
+.jn-card--lead .jn-card__thumb {
+  flex: 1 1 52%;
+  min-width: 0;
+}
+
+.jn-card--lead .jn-card__text {
+  flex: 1 1 48%;
+  min-width: 0;
+  gap: var(--cf-space-xl);
+}
+
+.jn-card__title--lead {
+  font-size: clamp(var(--cf-text-2xl), 3.4vw, var(--cf-text-3xl));
+}
+
+.jn-card--lead .jn-card__dek {
+  font-size: var(--cf-text-lg);
+}
+
+/* ---- a topic chip ----------------------------------------------------- */
+
+.jn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cf-space-xs);
+  padding: var(--cf-space-2xs) var(--cf-space-md);
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-sm);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-dim);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    border-color var(--cf-speed) var(--cf-ease),
+    color var(--cf-speed) var(--cf-ease);
+}
+
+.jn-chip:hover {
+  border-color: var(--cf-accent);
+  color: var(--cf-accent-text);
+}
+
+/* ---- the two home-page strips ----------------------------------------- */
+
+.jn-strip,
+.jn-subscribe {
+  margin-top: var(--jn-section);
+  padding-top: var(--jn-block);
+  border-top: 1px solid var(--cf-line);
+}
+
+.jn-strip__title,
+.jn-subscribe__title,
+.jn-related__title {
+  margin: 0 0 var(--cf-space-xl);
+  font-family: var(--cf-font-mono);
+  font-weight: 500;
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-mute);
+}
+
+.jn-strip__chips {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cf-space-md);
+}
+
+.jn-subscribe {
+  display: grid;
+  gap: var(--cf-space-xl);
+  max-width: var(--cf-measure);
+}
+
+.jn-subscribe__body {
+  margin: 0;
+  color: var(--cf-fg-dim);
+}
+
+.jn-subscribe__link {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cf-space-lg);
+  align-items: center;
+}
+
+/*
+ * The filled control, and it is BRONZE rather than ember.
+ *
+ * Used twice — the feed link on the home page and "The archive" on the 404 — which is why it is
+ * named for what it IS rather than for the first place it appeared. It was `jn-btn--feed` for about
+ * a minute, and a modifier named after one caller is how a second caller ends up with a copy.
+ *
+ * The design system ships exactly one filled button, `.cf-btn--ember`, and its comment reserves it
+ * by name: "the one solid call to action (Sign in)". That reservation is the whole reason the
+ * estate bar reads as one thing across nine products — there is a single ember rectangle on any
+ * page and it always means the same thing. A feed link borrowing it would put a second one here,
+ * two inches from the real one in the bar above, meaning something else.
+ *
+ * So this is a local modifier on the shared `.cf-btn` geometry, filled with the SURFACE accent. It
+ * is the design-system pattern turned one notch: same size, same type, same transition, a colour
+ * that says "this page" instead of "your account". `--cf-accent-ink` is the paired foreground the
+ * journal block declares at 4.94:1 on this exact fill, so the label is legible by measurement
+ * rather than by luck — a hand-picked ink is how the first draft of the exchange's chip failed.
+ *
+ * It was written as `cf-btn--primary` first, which does not exist anywhere in the estate. Nothing
+ * about that fails loudly: the element keeps `.cf-btn`, so it is still a correctly-sized control,
+ * just an unfilled one — a CTA that renders as a quiet ghost link and reads to a reviewer as a
+ * design choice. `test/tokens.test.ts` is what caught it, which is the case for that test existing.
+ */
+.jn-btn--solid {
+  background: var(--cf-accent);
+  border-color: var(--cf-accent);
+  color: var(--cf-accent-ink);
+}
+
+.jn-btn--solid:hover {
+  background: var(--cf-accent-hover);
+  border-color: var(--cf-accent-hover);
+  color: var(--cf-accent-ink);
+}
+
+/* ---- the head of a listing page --------------------------------------- */
+
+.jn-pagehead {
+  position: relative;
+  padding-bottom: var(--cf-space-2xl);
+  margin-bottom: var(--jn-block);
+  border-bottom: 1px solid var(--cf-line);
+}
+
+.jn-pagehead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--jn-rule-fade);
+}
+
+.jn-pagehead__eyebrow {
+  margin: 0 0 var(--cf-space-md);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-accent-text);
+}
+
+.jn-pagehead__title {
+  margin: 0;
+  font-family: var(--cf-font-display);
+  font-weight: 700;
+  font-size: var(--cf-text-3xl);
+  line-height: var(--cf-leading-tight);
+  letter-spacing: var(--cf-tracking-tight);
+}
+
+.jn-pagehead__standfirst {
+  margin: var(--cf-space-lg) 0 0;
+  max-width: var(--cf-measure);
+  color: var(--cf-fg-dim);
+  font-size: var(--cf-text-lg);
+}
+
+.jn-pagehead__actions {
+  margin: 0 0 var(--jn-block);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cf-space-lg);
+}
+
+/* ---- the topics index ------------------------------------------------- */
+
+.jn-topics {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
+  gap: var(--jn-gutter);
+}
+
+.jn-topics__item {
+  padding-top: var(--cf-space-xl);
+  border-top: 1px solid var(--cf-line);
+  display: grid;
+  gap: var(--cf-space-md);
+  align-content: start;
+}
+
+.jn-topics__name {
+  margin: 0;
+  font-family: var(--cf-font-display);
+  font-weight: 600;
+  font-size: var(--cf-text-xl);
+  letter-spacing: var(--cf-tracking-tight);
+}
+
+.jn-topics__link {
+  color: var(--cf-fg);
+  text-decoration: none;
+}
+
+.jn-topics__link:hover {
+  color: var(--cf-accent-text);
+}
+
+.jn-topics__blurb {
+  margin: 0;
+  color: var(--cf-fg-dim);
+}
+
+.jn-topics__count {
+  margin: 0;
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-mute);
+}
+
+/* ---- search ----------------------------------------------------------- */
+
+.jn-search {
+  display: grid;
+  gap: var(--cf-space-md);
+  max-width: var(--cf-measure);
+  margin-bottom: var(--cf-space-2xl);
+}
+
+.jn-search__label {
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-mute);
+}
+
+/* Composed with `cf-input`, never overriding it: only the size this page wants is set. */
+.jn-search__input {
+  font-size: var(--cf-text-lg);
+  padding: var(--cf-space-lg) var(--cf-space-xl);
+}
+
+.jn-search__count {
+  margin: 0 0 var(--cf-space-2xl);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-xs);
+  color: var(--cf-fg-mute);
+}
+
+.jn-empty {
+  margin: 0 0 var(--cf-space-2xl);
+  max-width: var(--cf-measure);
+  font-size: var(--cf-text-md);
+  color: var(--cf-fg-dim);
+}
+
+/* ---- an article ------------------------------------------------------- */
+
+/*
+ * The whole piece, bounded to the width of the grid inside it.
+ *
+ * `.jn-main` is `--cf-max-w` (1200px) and every element in the article that carries prose is capped
+ * at `--cf-measure` — but the HERO IS NOT. `.jn-article__hero-img` is `width: 100%` with a 16/9
+ * ratio, so with nothing here it fills the shell: on a wide monitor that is a 1200px photograph
+ * standing over a 68ch column, and the piece stops looking like an article and starts looking like a
+ * landing page. Capping the article itself fixes the hero, the head and anything added later in one
+ * declaration, instead of leaving each new full-bleed child to remember.
+ *
+ * The sum is the grid's own — apparatus column, gutter, measure — so the hero ends exactly where
+ * the prose column does and the two share a right edge. That is why `--jn-aside` is a token: this
+ * arithmetic and `grid-template-columns` have to agree, and a second `14rem` is how they stop
+ * agreeing six months from now.
+ */
+.jn-article {
+  max-width: calc(var(--jn-aside) + var(--jn-gutter) + var(--cf-measure));
+}
+
+.jn-article__head {
+  max-width: var(--cf-measure);
+  margin-bottom: var(--jn-block);
+}
+
+.jn-article__topics {
+  margin: 0 0 var(--cf-space-xl);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cf-space-md);
+}
+
+/*
+ * The largest type in the publication, and the second of the display face's two appearances. An
+ * article arrived at from a search result has about a second to say what it is, and the headline is
+ * the whole of that second.
+ */
+.jn-article__title {
+  margin: 0;
+  font-family: var(--cf-font-display);
+  font-weight: 700;
+  font-size: clamp(var(--cf-text-3xl), 5.2vw, var(--cf-text-4xl));
+  line-height: var(--cf-leading-tight);
+  letter-spacing: var(--cf-tracking-tight);
+}
+
+.jn-article__dek {
+  margin: var(--cf-space-xl) 0 0;
+  font-size: var(--cf-text-lg);
+  color: var(--cf-fg-dim);
+}
+
+.jn-article__byline {
+  margin: var(--cf-space-2xl) 0 0;
+  padding-top: var(--cf-space-lg);
+  border-top: 1px solid var(--cf-line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cf-space-md);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-mute);
+}
+
+.jn-article__author {
+  color: var(--cf-fg);
+}
+
+.jn-article__hero {
+  margin: 0 0 var(--jn-block);
+}
+
+.jn-article__hero-img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-lg);
+  background: var(--cf-bg-sunken);
+}
+
+/*
+ * The reading column and the apparatus column.
+ *
+ * The contents sit in the LEFT margin rather than the right, because the words are the page and a
+ * navigation aid on the right competes with the ragged edge of the prose for the same attention.
+ * The prose column is `minmax(0, …)` so a long unbreakable token — an address, a hash — shrinks the
+ * column instead of widening the grid and introducing a horizontal scrollbar.
+ */
+.jn-article__grid {
+  display: grid;
+  grid-template-columns: var(--jn-aside) minmax(0, var(--cf-measure));
+  gap: var(--jn-gutter);
+  align-items: start;
+}
+
+.jn-article__aside {
+  position: sticky;
+  top: var(--jn-headers);
+}
+
+.jn-article__foot {
+  max-width: var(--cf-measure);
+  margin-top: var(--jn-block);
+  padding-top: var(--jn-block);
+  border-top: 1px solid var(--cf-line);
+  display: grid;
+  gap: var(--jn-block);
+}
+
+/* ---- the table of contents -------------------------------------------- */
+
+/*
+ * The contents, bounded against the viewport.
+ *
+ * The one rule that matters here is the pair on the last two lines, and it is a bug fix rather than
+ * a refinement: `.jn-article__aside` is `position: sticky`, so the column STOPS moving once it
+ * reaches its offset. A contents list longer than the viewport therefore has entries that no amount
+ * of page scrolling will ever bring into view — they sit below the bottom edge of a box that has
+ * stopped travelling, and the reader has no way to reach them. The longest piece in `src/content/`
+ * has fourteen headings, which is already past that line on a laptop in landscape.
+ *
+ * Giving the list its own scroll fixes it at every article length, including the ones not written
+ * yet. The subtraction is the two bars the estate stacks above the content plus one step of air, so
+ * the box ends before the fold rather than exactly on it.
+ *
+ * This block was missing entirely — every child of `.jn-toc` had a rule and the container itself
+ * had none, which is invisible in the ordinary case and only shows up on a long article on a short
+ * screen. `test/tokens.test.ts` fails on a class used with no rule for exactly this reason.
+ */
+.jn-toc {
+  max-height: calc(100vh - var(--jn-headers) - var(--cf-space-3xl));
+  overflow-y: auto;
+  /* The list carries its own hairline down the left; the inset keeps a scrollbar off it. */
+  padding-right: var(--cf-space-sm);
+}
+
+.jn-toc__label {
+  margin: 0 0 var(--cf-space-lg);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-mute);
+}
+
+.jn-toc__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--cf-space-md);
+  border-left: 1px solid var(--cf-line);
+}
+
+/*
+ * The current entry is marked by a bronze rule in the margin, not by a colour change.
+ *
+ * A colour change on a list this small reads as a link state, and every entry here is a link. The
+ * rule is unambiguous, it is the same mark the masthead and the section heads use, and it survives
+ * a reader who cannot distinguish the bronze from the grey.
+ */
+.jn-toc__item {
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+}
+
+/* The indent IS the level, so each one names its own. See LEVEL_CLASS in `components/toc.tsx`. */
+.jn-toc__item--l2 {
+  padding-left: var(--cf-space-lg);
+}
+
+.jn-toc__item--l3 {
+  padding-left: var(--cf-space-3xl);
+}
+
+.jn-toc__item--current {
+  border-left-color: var(--cf-accent);
+}
+
+.jn-toc__link {
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-xs);
+  line-height: var(--cf-leading-snug);
+  color: var(--cf-fg-mute);
+  text-decoration: none;
+}
+
+.jn-toc__item--current .jn-toc__link,
+.jn-toc__link:hover {
+  color: var(--cf-fg);
+}
+
+/* ---- the prose -------------------------------------------------------- */
+
+.jn-body {
+  font-size: var(--cf-text-lg);
+  line-height: var(--cf-leading);
+}
+
+/* The about page has no aside, so it sets its own measure rather than inheriting the grid's. */
+.jn-body--prose {
+  max-width: var(--cf-measure);
+}
+
+/*
+ * The standfirst of the body, marked with the rule turned vertical.
+ *
+ * This is the one paragraph every reader reads, and it earns a mark. Same bronze, same 2px, rotated
+ * — which is the whole ornamental vocabulary this page has.
+ */
+.jn-body__lead {
+  margin: 0 0 var(--cf-space-2xl);
+  padding-left: var(--cf-space-2xl);
+  border-left: 2px solid var(--cf-accent);
+  font-size: var(--cf-text-xl);
+  line-height: var(--cf-leading-snug);
+  color: var(--cf-fg);
+}
+
+.jn-body__p {
+  margin: 0 0 var(--cf-space-2xl);
+}
+
+.jn-body__h2,
+.jn-body__h3 {
+  font-family: var(--cf-font-display);
+  letter-spacing: var(--cf-tracking-tight);
+  line-height: var(--cf-leading-tight);
+  /*
+   * `scroll-margin-top` is not a nicety. Every heading is a fragment target — the contents link to
+   * them, and so does anybody who shares a section — and both sticky headers would otherwise cover
+   * the heading the reader just asked to see.
+   */
+  scroll-margin-top: var(--jn-headers);
+}
+
+.jn-body__h2 {
+  position: relative;
+  margin: var(--jn-block) 0 var(--cf-space-xl);
+  padding-bottom: var(--cf-space-md);
+  font-weight: 700;
+  font-size: var(--cf-text-2xl);
+}
+
+.jn-body__h2::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--jn-rule-fade);
+}
+
+.jn-body__h3 {
+  margin: var(--cf-space-3xl) 0 var(--cf-space-lg);
+  font-weight: 600;
+  font-size: var(--cf-text-xl);
+}
+
+/*
+ * The unordered list takes a bronze dash instead of a bullet; the ordered one keeps its numbers.
+ *
+ * Nine ways to lose crypto IS a list of nine things and the count is the point. A list of three
+ * considerations is not a sequence, and numbering it would claim an order the prose does not have.
+ */
+.jn-body__list {
+  list-style: none;
+  margin: 0 0 var(--cf-space-2xl);
+  padding-left: var(--cf-space-2xl);
+  display: grid;
+  gap: var(--cf-space-lg);
+}
+
+.jn-body__list > li {
+  position: relative;
+}
+
+.jn-body__list > li::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--cf-space-2xl) * -1);
+  top: calc(var(--cf-text-lg) * var(--cf-leading) / 2);
+  width: var(--cf-space-xl);
+  height: 2px;
+  background: var(--cf-accent);
+}
+
+.jn-body__list--ordered {
+  list-style: decimal;
+  padding-left: calc(var(--cf-space-2xl) + var(--cf-space-md));
+}
+
+.jn-body__list--ordered > li::before {
+  content: none;
+}
+
+.jn-body__list--ordered > li::marker {
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-sm);
+  color: var(--cf-accent-text);
+}
+
+.jn-body__quote {
+  margin: var(--jn-block) 0;
+  padding: 0 0 0 var(--cf-space-2xl);
+  border-left: 1px solid var(--cf-line-strong);
+  font-size: var(--cf-text-xl);
+  line-height: var(--cf-leading-snug);
+  color: var(--cf-fg-dim);
+}
+
+.jn-body__cite {
+  display: block;
+  margin-top: var(--cf-space-lg);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  font-style: normal;
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-mute);
+}
+
+/*
+ * The two element selectors in this file, and both are inside `.jn-body`.
+ *
+ * `src/lib/inline.tsx` renders `[text](href)` and `` `code` `` as bare `<a>` and `<code>`, with no
+ * class — deliberately, because a tokeniser that also decides class names is a tokeniser that has to
+ * know about this stylesheet. Scoping to the prose container is what keeps that from styling the
+ * estate's own links in the bar and the footer.
+ */
+.jn-body a {
+  color: var(--cf-accent-text);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.jn-body code {
+  font-family: var(--cf-font-mono);
+  font-size: 0.9em;
+  padding: 0 var(--cf-space-2xs);
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-sm);
+  background: var(--cf-bg-sunken);
+}
+
+/* ---- the two block components ----------------------------------------- */
+
+/*
+ * A callout is an aside the reader may skip, so it takes the raised ground rather than a colour: a
+ * coloured panel in the middle of a page of prose reads as a warning, and none of these are.
+ */
+.jn-callout {
+  margin: var(--jn-block) 0;
+  padding: var(--cf-space-2xl);
+  background: var(--cf-bg-raised);
+  border: 1px solid var(--cf-line);
+  border-left: 2px solid var(--cf-accent);
+  border-radius: var(--cf-radius);
+}
+
+.jn-callout__title {
+  margin: 0 0 var(--cf-space-md);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-accent-text);
+}
+
+.jn-callout__text {
+  margin: 0;
+  font-size: var(--cf-text-md);
+}
+
+.jn-figure {
+  margin: var(--jn-block) 0;
+}
+
+.jn-figure__img {
+  width: 100%;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius);
+  background: var(--cf-bg-sunken);
+}
+
+.jn-figure__caption {
+  margin-top: var(--cf-space-md);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  line-height: var(--cf-leading-snug);
+  color: var(--cf-fg-mute);
+}
+
+/* ---- the foot of an article ------------------------------------------- */
+
+.jn-byline {
+  display: grid;
+  gap: var(--cf-space-sm);
+}
+
+.jn-byline__name {
+  margin: 0;
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg);
+}
+
+.jn-byline__bio {
+  margin: 0;
+  font-size: var(--cf-text-md);
+  color: var(--cf-fg-dim);
+}
+
+.jn-share {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cf-space-lg);
+}
+
+.jn-share__label {
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-fg-mute);
+}
+
+/* Composed with `cf-btn`; only the type this page wants on it is set. */
+.jn-share__btn {
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+}
+
+/*
+ * The confirmation after a copy. It is a `role="status"`, so it is announced; the colour is the
+ * 4.5:1 text step because it is type; and it carries no tick — a green mark beside a word that
+ * already says "copied" is the same statement made twice.
+ */
+.jn-share__said {
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-good-text);
+}
+
+.jn-related {
+  margin-top: var(--jn-section);
+  padding-top: var(--jn-block);
+  border-top: 1px solid var(--cf-line);
+}
+
+/* ---- the unregistered-placement notice -------------------------------- */
+
+/*
+ * Shown when the surface is served from a host the estate does not recognise. It takes the WARN ramp
+ * rather than the accent, because it is the one thing on this surface that is a caution about the
+ * page itself rather than a part of the publication.
+ */
+.jn-notice {
+  margin-bottom: var(--jn-block);
+  padding: var(--cf-space-xl);
+  max-width: var(--cf-measure);
+  background: var(--cf-warn-wash);
+  border: 1px solid var(--cf-warn-edge);
+  border-radius: var(--cf-radius);
+}
+
+.jn-notice__title {
+  margin: 0 0 var(--cf-space-2xs);
+  font-family: var(--cf-font-mono);
+  font-size: var(--cf-text-2xs);
+  letter-spacing: var(--cf-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cf-warn-text);
+}
+
+.jn-notice__body {
+  margin: 0;
+  font-size: var(--cf-text-sm);
+  color: var(--cf-fg-dim);
+}
+
+/* ---- narrower than a desk --------------------------------------------- */
+
+/*
+ * ONE breakpoint, at the width the two-column article stops fitting.
+ *
+ * It is expressed in `rem` rather than `px` so it moves with a reader who has raised their default
+ * font size — which is exactly the reader for whom a 14rem sidebar beside a 68ch column stops
+ * working first, and exactly the reader a px breakpoint ignores.
+ */
+@media (max-width: 60rem) {
+  .jn-main {
+    padding-left: var(--cf-space-xl);
+    padding-right: var(--cf-space-xl);
+  }
+
+  .jn-masthead__inner {
+    flex-wrap: wrap;
+    gap: var(--cf-space-lg) var(--cf-space-xl);
+    padding-left: var(--cf-space-xl);
+    padding-right: var(--cf-space-xl);
+  }
+
+  .jn-masthead__spacer {
+    display: none;
+  }
+
+  /*
+   * The contents move ABOVE the prose and stop sticking. A sticky block inside a single-column flow
+   * on a phone is a panel that follows the reader down the page and covers the words.
+   */
+  .jn-article__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .jn-article__aside {
+    position: static;
+  }
+
+  /*
+   * And the contents lose their scroll with it. The bound above exists because a STICKY column
+   * stops travelling and strands its overflow; a static block in the flow has no such problem, and
+   * leaving the `max-height` on would put a second scrollbar inside the page on the device with the
+   * least room for one.
+   */
+  .jn-toc {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .jn-card--lead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* ---- the reader who asked for less motion ----------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * Not `transition: none`: two of the transitions above carry meaning — the card underline is the
+   * hover affordance — so they are made instant rather than removed. The reader gets the state
+   * change and not the movement.
+   */
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- print ------------------------------------------------------------ */
+
+/*
+ * An archive gets printed and saved as PDF, which is a real arrival this surface can serve for the
+ * cost of six rules. The apparatus goes — a table of contents with no page numbers is furniture on
+ * paper, and share buttons are worse — and the prose keeps its measure.
+ */
+@media print {
+  .jn-masthead,
+  .jn-article__aside,
+  .jn-share,
+  .jn-related,
+  .jn-subscribe {
+    display: none;
+  }
+
+  .jn-article__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .jn-body a {
+    text-decoration: underline;
+  }
+}

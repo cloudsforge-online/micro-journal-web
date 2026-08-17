@@ -1,0 +1,762 @@
+# Continuous integration.
+#
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+# THE `check` AND `image` JOBS ARE TEMPORARY, exactly as they are in `micro-explorer-web`,
+# `micro-admin-web`, `micro-mint-web`, `micro-trade-web`, `micro-pool-web`, `micro-hub-web` and
+# `exchange-web`. The org's reusable `web-ci.yml` is the target and the `hygiene` and `publish` jobs
+# already call the org repository; the two local jobs exist for one reason and disappear with it:
+#
+#   @cloudsforge/ui is unpublished, and this repository consumes it as `link:../ui/packages/ui`.
+#   The reusable workflow does a single checkout and then `pnpm install --frozen-lockfile`, which
+#   cannot resolve a sibling directory that is not there.
+#
+# TWO INPUTS OF THE REUSABLE WORKFLOW WILL STILL NOT SUIT THIS REPOSITORY.
+#
+#   1. IT RUNS `pnpm test` BEFORE `pnpm build`, AND HERE THAT ORDER SILENTLY HALVES THE SUITE.
+#      `test/prerender.test.ts` reads the files the build wrote — it is the only check here that
+#      looks at OUTPUT rather than source — and it SKIPS when `dist` is absent, so that `pnpm test`
+#      still passes for somebody who has just cloned. A skip is reported as a pass. The `check` job
+#      below builds first, and the "actually ran" step fails the run if that file reports a skip.
+#   2. ITS `image` JOB PROBES A DEEP ROUTE AND REQUIRES A 200 FOR ANY ADDRESS. This one requires a
+#      404 for an article that was never written, which is a product requirement rather than an
+#      accident: `nginx.conf` has no route list at all, the file set IS the route set, and
+#      `/a/an-essay-nobody-wrote` answering 200 would mean the SPA fallback had come back and every
+#      typo in every shared link was being indexed as a duplicate of the archive.
+#
+# THERE IS NO SERVICE CHECKOUT HERE, AND ON THIS SURFACE THAT IS PERMANENT RATHER THAN PENDING.
+# micro-pool-web checks out micro-pool to keep its response shapes honest. There is no
+# `micro-journal` and there is not going to be one: an article is committed source, `src/content/`
+# is the whole backend, and every page is written to disk at build time. The counterpart of a
+# response-shape test here is `test/prerender.test.ts`, which reads the bytes that will be served.
+#
+# THE SIBLING CHECKOUTS THAT REMAIN ARE NOT DECORATION. Three of this repository's tests cross-check
+# another repository and SKIP when it is absent, so that `pnpm test` passes for somebody who cloned
+# only this one. A skipped test is an unmeasured one, so on the runner the absence has to be fatal —
+# otherwise a checkout that silently produced nothing looks exactly like a green cross-check.
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+
+name: CI
+
+on:
+  push:
+    # `release/**` builds too. A release branch carries the estate-wide version bump and has to
+    # publish its images before testnet can be deployed from it.
+    branches: [main, 'design-system/**', 'release/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, build, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: journal-web }
+
+      # The design system, consumed as `link:../ui/packages/ui`.
+      #
+      # `|| github.token` and not a bare secret. Measured on 2026-08-09 on a sibling repository:
+      # it was new, ESTATE_READ_TOKEN had not been set on it yet, and
+      # `token: ${{ secrets.ESTATE_READ_TOKEN }}` resolved to the EMPTY STRING — which
+      # actions/checkout does not treat as "use the default", it treats as a supplied-but-invalid
+      # input and dies with `Input required and not supplied: token` before it has said which
+      # repository it was trying to read. The named secret stays first because it is the estate's
+      # convention and because these siblings were private until recently; the fallback is what
+      # micro-org's own publish-image.yml does, for the reason its comment gives: it "falls back to
+      # the job token, which is enough while those repositories are public".
+      - uses: actions/checkout@v4
+        with:
+          repository: cloudsforge-online/micro-ui
+          path: ui
+          token: ${{ secrets.ESTATE_READ_TOKEN || github.token }}
+
+      # micro-brand, for test/brand-chrome.test.ts. The favicons in public/ are COPIES of
+      # CloudsForge's own, and a copy that is never compared is a copy that drifts.
+      - uses: actions/checkout@v4
+        with:
+          repository: cloudsforge-online/micro-brand
+          path: brand
+          token: ${{ secrets.ESTATE_READ_TOKEN || github.token }}
+
+      # micro-site, read by TWO of this repository's tests.
+      #
+      # test/shared-chrome.test.ts resolves the footer's legal links: `CloudsForgeFooter` composes
+      # `/legal/terms` and friends itself, from the registry, so nothing in THIS repository would
+      # notice a path that stopped resolving — status-web paid for exactly that with two footer
+      # links broken from the day they were written.
+      #
+      # test/content.test.ts is the reason particular to a publication: it checks this archive's
+      # claim register against `site/src/content/claims.ts`, so the marketing site and the articles
+      # cannot state the same fact about this estate two different ways. Two registers that drift
+      # are worse than one, because each looks authoritative on its own page.
+      - uses: actions/checkout@v4
+        with:
+          repository: cloudsforge-online/micro-site
+          path: site
+          token: ${{ secrets.ESTATE_READ_TOKEN || github.token }}
+
+      # Pinned, because the checkout lives at journal-web/ and the action looks for the
+      # packageManager field in the workspace root, where there is no package.json.
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.9.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: journal-web/pnpm-lock.yaml }
+
+      # `link:` resolves to the sibling's own node_modules, so the design system must be installed
+      # before this repository is — without this, `tsc` cannot resolve ../ui's own imports when it
+      # typechecks the linked sources.
+      - name: Install the sibling design system
+        run: pnpm --dir ui install --frozen-lockfile
+
+      - name: Install
+        working-directory: journal-web
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: journal-web
+        run: pnpm typecheck
+
+      # ──────────────────────────────────────────────────────────────────────────────────────────
+      # BUILD BEFORE TEST. THE ORDER IS ITSELF A CHECK.
+      #
+      # `pnpm build` is `vite build && node … scripts/prerender.ts`: the second half writes a real
+      # HTML file for every address this publication has, plus feed.xml, sitemap.xml and robots.txt.
+      # `test/prerender.test.ts` then reads those files and asserts the ARTICLES ARE IN THEM — that
+      # the pages were not written as an empty root div under a perfect head, which is a failure
+      # every source-reading test in this repository passes through unmoved.
+      #
+      # Reversed, the build still runs and the test still passes, having read nothing.
+      # ──────────────────────────────────────────────────────────────────────────────────────────
+      - name: Build
+        working-directory: journal-web
+        run: pnpm build
+
+      - name: Test
+        working-directory: journal-web
+        run: pnpm test
+
+      - name: The cross-repository checks ran, and so did the one that reads dist
+        working-directory: journal-web
+        run: |
+          set -euo pipefail
+          test -d ../brand/assets/site || {
+            echo "::error::micro-brand was not checked out; the favicons were never compared"
+            exit 1
+          }
+          test -f ../site/src/app.tsx || {
+            echo "::error::micro-site was not checked out; the footer's legal links were never resolved"
+            exit 1
+          }
+          test -f ../site/src/content/claims.ts || {
+            echo "::error::micro-site was not checked out; the claim registers were never compared"
+            exit 1
+          }
+          test -f dist/index.html || {
+            echo "::error::there is no build to read; the Build step must precede Test"
+            exit 1
+          }
+          # A skip is reported by the runner as a pass. Fail if any of these files reported one.
+          out=$(node --import tsx --import @cloudsforge/ui/test-loader --test \
+                  test/brand-chrome.test.ts test/shared-chrome.test.ts \
+                  test/content.test.ts test/prerender.test.ts 2>&1 || true)
+          # THE SUMMARY LINE IS READ THROUGH TWO LAYERS OF REPORTER INCIDENTAL DETAIL, and both were
+          # measured rather than guessed:
+          #
+          #   - WHICH PREFIX. Piped output is TAP on Node 22 (`# skipped 1`) and `spec` on Node 24
+          #     (`ℹ skipped 1`). A pattern that knows only the TAP form goes silent the day
+          #     `node-version:` above moves — the gate failing exactly as the thing it guards fails.
+          #   - COLOUR. The spec reporter emits the line as `\e[34mℹ skipped 1\e[39m`, so `^ℹ` does
+          #     not match it. Stripped first, because a gate that cannot see a skip reports a pass.
+          #
+          # A here-string rather than a pipe: `grep -q` exits on its first match, the producer then
+          # writes into a closed pipe, and `pipefail` promotes that SIGPIPE to a failed step — a
+          # gate that fails for no reason and passes on re-run teaches re-running instead of reading.
+          plain=$(perl -pe 's/\e\[[0-9;]*m//g' <<<"$out")
+          if grep -qE '^(# |ℹ )skipped [1-9]' <<<"$plain"; then
+            printf '%s\n' "$out"
+            echo "::error::a test skipped on the runner, where the sibling — and the build — are present"
+            exit 1
+          fi
+          echo "ok: the siblings were read and dist was walked"
+
+      - name: The brand chrome and every article's artwork reached the build output
+        # Committing the bytes and shipping them are two different claims. The web template's
+        # Dockerfile once did not copy public/ into the build context, so four frontends shipped an
+        # image with no icon in it while their own brand test passed.
+        #
+        # The per-article artwork is the half particular to this surface. `card.png` is the picture
+        # in every link preview an article will ever get, at an address quoted in markup that has
+        # already been posted; a 404 there is a grey box in Slack and on LinkedIn for years.
+        working-directory: journal-web
+        run: |
+          set -euo pipefail
+          for asset in favicon-32x32.png favicon-192x192.png favicon-512x512.png og-1200x630.png; do
+            test -f "dist/$asset" || { echo "::error::dist/$asset is missing from the build output"; exit 1; }
+          done
+          fail=0
+          for dir in public/articles/*/; do
+            slug=$(basename "$dir")
+            for art in hero.png card.png; do
+              test -f "dist/articles/$slug/$art" || {
+                echo "::error::dist/articles/$slug/$art is missing; that article's share card 404s"; fail=1; }
+            done
+          done
+          [ "$fail" = 0 ] || exit 1
+          echo "ok: the favicons, the fallback card and every article's artwork are in dist"
+
+  rules:
+    name: Estate rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ────────────────────────────────────────────────────────────────────────────────────────
+      # EVERY RULE BELOW IS ALREADY A TEST. It is repeated here so that deleting the test does not
+      # silently delete the rule — which is the failure mode of a repository whose most important
+      # claims are enforced only by files that same commit is allowed to touch.
+      # ────────────────────────────────────────────────────────────────────────────────────────
+
+      - name: No build-time configuration
+        # A `VITE_` variable is read at build time and frozen into the artefact, so the image has to
+        # be rebuilt to be promoted — which means the thing that reaches production is not the thing
+        # that passed CI. Also asserted by test/no-build-time-config.test.ts.
+        run: |
+          set -uo pipefail
+          if grep -rn --include='*.ts' --include='*.tsx' --include='*.html' \
+               -e 'import\.meta\.env' -e 'VITE_' src index.html; then
+            echo "::error::this bundle must read no build-time environment; hosts come from window.location at runtime"
+            exit 1
+          fi
+          echo "ok: no build-time environment"
+
+      - name: No hard-coded CloudsForge hostname
+        # A literal hostname is a second, unversioned copy of the surface registry, and the copy is
+        # the one that will be wrong. src/lib/hosts.ts EXPLAINS the rule and has to name a hostname
+        # to do it, so comments are stripped first.
+        run: |
+          set -uo pipefail
+          strip() { perl -0pe 's{\{/\*.*?\*/\}}{}gs; s{/\*.*?\*/}{}gs; s{^\s*//.*$}{}gm' "$1"; }
+          fail=0
+          for f in $(find src -name '*.ts' -o -name '*.tsx'); do
+            if strip "$f" | grep -n 'cloudsforge\.online' | sed "s|^|$f:|" | grep .; then fail=1; fi
+          done
+          [ "$fail" = 0 ] || { echo "::error::derive hosts from window.location.hostname; do not name them"; exit 1; }
+          echo "ok: no literal hostnames in src"
+
+      # ────────────────────────────────────────────────────────────────────────────────────────
+      # THE RULES THAT ARE THIS SURFACE'S OWN, AND THEY ARE ALL ABOUT BEING FOUND.
+      #
+      # Every other frontend in the estate is a tool: it is reached by somebody who already knows
+      # CloudsForge exists, and its SEO is politeness. This one is a front door. It exists so that
+      # somebody searching for "how do people lose crypto" arrives, reads something useful, and only
+      # then discovers there is an estate behind it. Everything below is the machinery of that, and
+      # each rule fails the same quiet way: the pages render perfectly and nobody ever sees them.
+      # ────────────────────────────────────────────────────────────────────────────────────────
+
+      - name: THE ABSOLUTE URLs ARE A PLACEHOLDER AT BUILD TIME AND A HOST AT REQUEST TIME
+        # A canonical link, `og:url`, the RSS channel link and every JSON-LD `@id` must be absolute,
+        # and no host is known when the file is written. Baking one in fails in the direction that
+        # does not look like a failure: the testnet archive tells every crawler that its articles
+        # really live on the mainnet host, so it is de-indexed in favour of an origin its readers
+        # were never on. Also asserted by test/seo.test.ts and, on the written files, by
+        # test/prerender.test.ts.
+        run: |
+          set -uo pipefail
+          grep -q "ORIGIN_PLACEHOLDER = '__CF_ORIGIN__'" src/lib/meta.ts || {
+            echo "::error::the origin placeholder has moved; every absolute URL is now a guess"; exit 1; }
+          directives=$(grep -v '^[[:space:]]*#' nginx.conf)
+          grep -qF "sub_filter '__CF_ORIGIN__' '\$scheme://\$host'" <<<"$directives" || {
+            echo "::error::nginx no longer substitutes the origin; every canonical ships a placeholder"; exit 1; }
+          # Each of these three is invisible in a browser and total in a crawler.
+          grep -q 'sub_filter_once off;' <<<"$directives" || {
+            echo "::error::sub_filter_once defaults to ON; only the first of an article's dozen placeholders would be replaced"
+            exit 1; }
+          grep -qE 'sub_filter_types .*application/rss\+xml' <<<"$directives" || {
+            echo "::error::sub_filter_types defaults to text/html alone; the feed and the sitemap would ship raw placeholders"
+            exit 1; }
+          # THE ABSENCE. `gzip_static` is the obvious optimisation for a directory of static files,
+          # and it passes pre-compressed bodies through the filter untouched — so every crawler that
+          # accepts gzip, which is all of them, would receive the placeholder.
+          if grep -n 'gzip_static' <<<"$directives" | grep .; then
+            echo "::error::gzip_static defeats sub_filter; the origin would never be substituted"
+            exit 1
+          fi
+          echo "ok: one image, correct on every hostname"
+
+      - name: AN ADDRESS THAT WAS NEVER WRITTEN ANSWERS 404
+        # `try_files $uri /index.html` answers 200 for every address in existence, which makes a
+        # "page not found" screen a success: search engines index it, uptime checks call it healthy,
+        # and a deploy that drops a page looks exactly like a deploy that did not.
+        #
+        # This surface needs no route list to avoid that, because the prerender writes a real file
+        # per address and the file set IS the route set. What must never come back is `/index.html`
+        # in the `try_files` chain. Comments are stripped first: nginx.conf's own header QUOTES the
+        # directive it refuses, in order to explain the design.
+        run: |
+          set -uo pipefail
+          directives=$(grep -v '^[[:space:]]*#' nginx.conf)
+          if printf '%s\n' "$directives" | grep -nE 'try_files[[:space:]]+\$uri[[:space:]].*[[:space:]]/index\.html'; then
+            echo "::error::the SPA fallback is back; an article that was never written would answer 200"
+            exit 1
+          fi
+          grep -qF 'try_files $uri $uri/index.html $uri/ =404;' <<<"$directives" || {
+            echo "::error::the catch-all no longer ends in =404"; exit 1; }
+          grep -q 'error_page 404 /404.html' <<<"$directives" || {
+            echo "::error::there is no designed page under the real 404 status"; exit 1; }
+          echo "ok: unknown addresses answer 404"
+
+      - name: THE SITEMAP AND THE FEED ARE FILES THE BUILD WROTE
+        # Every other surface composes robots.txt with `return 200` in nginx. This one cannot: the
+        # sitemap has an entry per article and per topic, each with a `lastmod` from that article's
+        # own front matter, and nginx knows none of that. `src/lib/syndication.ts` builds all three
+        # from `src/content/`, so a new article is in the sitemap because it exists rather than
+        # because somebody remembered.
+        #
+        # The one `return 200` that IS allowed is the non-mainnet robots.txt — and it is written
+        # across real lines, because nginx does not process backslash escapes in a quoted string.
+        # `'Disallow: /\n'` emits a literal backslash and an n, and a strict parser drops the
+        # directive. The copy of this file on exchange-web has that bug in it, harmlessly.
+        run: |
+          set -uo pipefail
+          for f in feed.xml sitemap.xml robots.txt; do
+            grep -q "$f" scripts/prerender.ts || {
+              echo "::error::$f is no longer written by the build"; exit 1; }
+          done
+          directives=$(grep -v '^[[:space:]]*#' nginx.conf)
+          if printf '%s\n' "$directives" | grep -nE '<loc>|<urlset|<rss'; then
+            echo "::error::nginx is composing a sitemap; it belongs to the build, which knows the corpus"
+            exit 1
+          fi
+          if printf '%s\n' "$directives" | grep -nE "return[[:space:]]+[0-9]+[[:space:]]+['\"][^'\"]*\\\\n"; then
+            echo "::error::a backslash-n in an nginx string is two characters, not a newline"
+            exit 1
+          fi
+          # A second archive at a second address is not a similar page, it is the same page twice.
+          grep -qF 'if ($cf_env) { return 404; }' <<<"$directives" || {
+            echo "::error::a non-mainnet hostname still publishes a sitemap or a feed"; exit 1; }
+          echo "ok: the machine-readable files come from the corpus"
+
+      - name: No credential can reach the image, and nothing is proxied
+        # An image is built once and promoted, so a credential inside one is a published credential.
+        # There is also nothing to authenticate TO: this surface calls no CloudsForge service at
+        # all — src/lib/hosts.ts exports no apiBase — and there is no micro-journal to call.
+        run: |
+          set -uo pipefail
+          directives=$(grep -v '^[[:space:]]*#' nginx.conf)
+          if printf '%s\n' "$directives" | grep -niE 'proxy_pass|Authorization|Bearer'; then
+            echo "::error::this container proxies nothing and holds no credential"
+            exit 1
+          fi
+          dockerfile=$(grep -v '^[[:space:]]*#' Dockerfile)
+          if printf '%s\n' "$dockerfile" | grep -niE 'TOKEN|SECRET|PASSWORD'; then
+            echo "::error::the image must carry no credential"
+            exit 1
+          fi
+          echo "ok: no proxy, no credential"
+
+      - name: Nothing is gated, and no page fetches anything
+        # An article is public writing. A gate would ask a stranger who arrived from a search result
+        # to prove who they are before being shown a paragraph, which is the one thing guaranteed to
+        # send them back to the results page.
+        #
+        # The shared bar is still mounted, and that is deliberate: a page that drops it does not read
+        # as "needs no account", it reads as a page that fell off the estate. So a session may exist.
+        # It may live in exactly ONE named file, and no route and no page may branch on it.
+        run: |
+          set -uo pipefail
+          strip() { perl -0pe 's{\{/\*.*?\*/\}}{}gs; s{/\*.*?\*/}{}gs; s{^\s*//.*$}{}gm' "$1"; }
+          fail=0
+
+          for f in $(find src -name '*.ts' -o -name '*.tsx'); do
+            if strip "$f" | grep -nE 'ProtectedRoute|RequireAuth|RequireSession|redirectToLogin' | sed "s|^|$f:|" | grep .; then fail=1; fi
+          done
+          [ "$fail" = 0 ] || { echo "::error::every page on this surface renders for everybody"; exit 1; }
+
+          # One file holds the credential. Nothing else in the bundle has heard of one.
+          for f in $(find src -name '*.ts' -o -name '*.tsx'); do
+            [ "$f" = "src/lib/session.ts" ] && continue
+            if strip "$f" | grep -nE 'Authorization|Bearer|localStorage|document\.cookie' | sed "s|^|$f:|" | grep .; then fail=1; fi
+          done
+          [ "$fail" = 0 ] || { echo "::error::the session lives in src/lib/session.ts and nowhere else"; exit 1; }
+
+          # NO PAGE FETCHES. Every word here is committed source, and the prerender renders each page
+          # with no network at all — so a `fetch` in a page is either dead in the written file or,
+          # worse, a paragraph that exists in a browser and not in the artefact a crawler reads.
+          for f in $(find src/pages src/components -name '*.tsx'); do
+            if strip "$f" | grep -nE '\bfetch\(|XMLHttpRequest|EventSource' | sed "s|^|$f:|" | grep .; then fail=1; fi
+          done
+          [ "$fail" = 0 ] || { echo "::error::a page fetches; src/content/ is the whole backend"; exit 1; }
+
+          if strip src/lib/hosts.ts | grep -nE 'export (function|const) apiBase' | grep .; then
+            echo "::error::this surface has acquired an API; there is no micro-journal"
+            exit 1
+          fi
+          echo "ok: nothing gated, nothing fetched"
+
+      # ────────────────────────────────────────────────────────────────────────────────────────
+      # THE RULES THE PUBLICATION EXISTS FOR.
+      #
+      # This is written to be read by somebody who has never owned a coin, and it is published by a
+      # company that sells the things it explains. Two claims decide whether that is honest, and
+      # both are the kind that soften one draft at a time:
+      #
+      #   1. NOTHING HERE IS ADVICE, AN OFFER OR A FORECAST. An article may explain what a seed
+      #      phrase is. It may not tell somebody what to buy, promise what a coin will do, or put a
+      #      number on a return. The line is not pedantry: the moment a page does any of those, a
+      #      piece of plain-language explanation has become an unlicensed solicitation.
+      #   2. WE ARE NOT NEUTRAL ABOUT OUR OWN PRODUCTS, AND EVERY PAGE SAYS SO. The disclosure is in
+      #      the SHELL rather than on the articles that happen to mention CloudsForge, because a
+      #      per-article notice is the one somebody forgets on the fourth article.
+      #
+      # test/content.test.ts is the real gate — it reads every sentence of every article, and it
+      # also holds the claim register, which is the third rule and the one with a source: a number
+      # about our own chain, printed by the people who run it, must cite where it came from. These
+      # steps are the crude second copies that survive that file being deleted.
+      # ────────────────────────────────────────────────────────────────────────────────────────
+
+      - name: NO ARTICLE OFFERS A RETURN, A FORECAST OR A RECOMMENDATION
+        run: |
+          set -uo pipefail
+          strip() { perl -0pe 's{\{/\*.*?\*/\}}{}gs; s{/\*.*?\*/}{}gs; s{^\s*//.*$}{}gm' "$1"; }
+          fail=0
+          for f in index.html $(find src/content src/pages -name '*.ts' -o -name '*.tsx'); do
+            if strip "$f" | grep -niE '\bguaranteed?\b|\bAPY\b|\bAPR\b|\brisk-free\b|\bsafe investment\b|\bwe recommend (buying|selling|holding|investing)\b|\byou should (buy|sell|invest)\b|\bwill (double|moon|go up)\b|\bprice target\b|\bto the moon\b' \
+                 | sed "s|^|$f:|" | grep .; then fail=1; fi
+          done
+          [ "$fail" = 0 ] || {
+            echo "::error::an article offers a return, a forecast or a recommendation"
+            exit 1
+          }
+          echo "ok: no article tells anybody what to do with their money"
+
+      - name: THE DISCLOSURE IS PRESENT, AND IT IS IN THE CHROME
+        # Under every page, including the ones that do not mention CloudsForge at all — because a
+        # reader cannot know which article was written by an interested party unless every one of
+        # them says so. Also asserted by test/shared-chrome.test.ts.
+        run: |
+          set -uo pipefail
+          strip() { perl -0pe 's{\{/\*.*?\*/\}}{}gs; s{/\*.*?\*/}{}gs; s{^\s*//.*$}{}gm' "$1"; }
+          shell=$(strip src/components/shell.tsx)
+          grep -q 'not neutral about our own products' <<<"$shell" || {
+            echo "::error::the shell no longer discloses that this publication has an interest"; exit 1; }
+          grep -q 'financial advice' <<<"$shell" || {
+            echo "::error::the shell no longer says that nothing here is advice"; exit 1; }
+          echo "ok: the disclosure is under every page"
+
+      - name: EVERY NUMBER ABOUT THIS ESTATE IS A REGISTERED CLAIM
+        # A sentence naming CloudsForge, Hearth, EMBER, a Spark or a Forge product AND carrying a
+        # digit is a statement about our own chain that a reader has no way to check.
+        # `src/content/claims.ts` records each with the file and symbol it came from, and
+        # test/content.test.ts refuses any that is not there. The register is deliberately a SUBSET
+        # of micro-site's, cited to the same upstream symbols, so the archive and the marketing site
+        # cannot disagree.
+        run: |
+          set -uo pipefail
+          test -f src/content/claims.ts || {
+            echo "::error::the claim register is gone; an article may now state any number about this estate"; exit 1; }
+          grep -q 'CLAIMS' test/content.test.ts || {
+            echo "::error::nothing reads the claim register any more"; exit 1; }
+          # A citation names a file and a SYMBOL, never a line. micro-site records four separate red
+          # builds caused by line numbers that had moved, every one of them a stale position rather
+          # than a wrong value.
+          if grep -nE "source: *'[^']*:[0-9]+" src/content/claims.ts | grep .; then
+            echo "::error::a claim cites a line number; name the constant or the heading instead"
+            exit 1
+          fi
+          echo "ok: every claim about this estate has a source"
+
+      - name: EVERY ARTICLE HAS ITS OWN HEAD, ITS OWN CARD AND ITS OWN ARTWORK
+        # Forty-odd addresses sharing the archive's title and the archive's share card is the single
+        # most likely SEO failure on a surface like this, and it looks like nothing at all in a
+        # browser: every page renders, and every search result and every pasted link is identical.
+        run: |
+          set -uo pipefail
+          fail=0
+          # The two pages with many addresses behind one component. Each must build its head from the
+          # SUBJECT it was handed — `articleHead(article, …)`, `topicHead(tag, …)` — because the
+          # alternative compiles, renders and looks correct: a constant head, and forty addresses
+          # that a search engine sees as one page duplicated.
+          grep -q 'articleHead(article' src/pages/article.tsx || {
+            echo "::error::the article page no longer builds its head from the article it is rendering"; fail=1; }
+          grep -q 'topicHead(tag' src/pages/topic.tsx || {
+            echo "::error::the topic page no longer builds its head from the topic it is rendering"; fail=1; }
+          # And every page has one at all. A page with no <Head> inherits index.html's, which is the
+          # archive's title and the archive's card.
+          # `<Head` alone, not `<Head page=`: the article page's props are wrapped across lines, and a
+          # pattern that only matches the one-line form fails on the one page that matters most.
+          for f in src/pages/*.tsx; do
+            grep -q '<Head' "$f" || {
+              echo "::error::$f renders no <Head>; it would inherit the shell's title and share card"; fail=1; }
+          done
+          for f in src/content/articles/*.ts; do
+            slug=$(basename "$f" .ts)
+            for art in hero.png card.png; do
+              test -f "public/articles/$slug/$art" || {
+                echo "::error::$slug has no $art; its link previews would fall back to the site card"; fail=1; }
+            done
+          done
+          [ "$fail" = 0 ] || exit 1
+          echo "ok: every article carries its own head and its own artwork"
+
+  image:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: journal-web }
+      - uses: actions/checkout@v4
+        with:
+          repository: cloudsforge-online/micro-ui
+          path: ui
+          token: ${{ secrets.ESTATE_READ_TOKEN || github.token }}
+
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: journal-web
+          build-contexts: uipkg=ui
+          build-args: RELEASE=${{ github.sha }}
+          push: false
+          load: true
+          tags: journal-web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # PROBED, NOT READ. Every defect this step guards was invisible in the config and obvious in a
+      # response: nginx's `add_header` is all-or-nothing per level, so a location that sets
+      # Cache-Control silently loses every inherited security header; `try_files` is a file lookup
+      # rather than an internal redirect, so serving /index.html from `location = /` never enters
+      # `location = /index.html`; and `sub_filter` cannot be reasoned about from the file at all,
+      # because what it does depends on the request that arrived. Reading the config suggests all
+      # three are fine. Curling it does not.
+      - name: The image serves the archive, 404s what was never written, and fills in its own origin
+        run: |
+          set -uo pipefail
+          docker run -d --name ci-journal-web -p 127.0.0.1:8080:8080 journal-web:ci
+          for _ in $(seq 1 30); do
+            code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ || true)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          [ "${code:-}" = "200" ] || { echo "::error::the image returned ${code:-no answer} for /"; docker logs --tail 60 ci-journal-web; exit 1; }
+
+          fail=0
+          host='journal.cloudsforge.online'
+          get() { curl -s -m 5 -H "Host: $host" "http://127.0.0.1:8080$1" || true; }
+          status() { curl -s -m 5 -o /dev/null -w '%{http_code}' -H "Host: $host" "http://127.0.0.1:8080$1" || true; }
+
+          # ── every address a reader can be given, cold ──────────────────────────────────────────
+          # These are links pasted into conversations and returned by search engines; every one of
+          # them is somebody's FIRST arrival, with no client router warmed up to rescue it.
+          for owned in / /about /topics /topics/starting-out /search \
+                       /a/nine-ways-people-lose-crypto /a/the-healthy-way-to-hold-crypto; do
+            got=$(status "$owned")
+            [ "$got" = "200" ] || { echo "::error::$owned returned $got"; fail=1; }
+          done
+
+          # ── and the addresses that are not addresses ───────────────────────────────────────────
+          # An article that was never written is not a page. This is the check that the SPA fallback
+          # has not come back: with `try_files $uri /index.html` every one of these answers 200 and
+          # is indexed as a duplicate of the archive.
+          for unknown in /a/an-essay-nobody-wrote /topics/not-a-topic /nope/not/a/route /a; do
+            got=$(status "$unknown")
+            [ "$got" = "404" ] || { echo "::error::$unknown returned $got; it must be 404"; fail=1; }
+          done
+          # NOT A PIPE INTO `grep -q` — the hazard this file avoids with case statements throughout.
+          # grep -q exits at its first match and closes the pipe while curl is still writing; curl
+          # dies of EPIPE (23), `pipefail` makes that the pipeline's status, and the `||` then
+          # reports a failure about a response that was perfect. Measured 2026-08-10 on
+          # micro-hub-web — micro-org#347. Capturing first leaves no pipe to close early.
+          missing=$(get /a/an-essay-nobody-wrote)
+          case "$missing" in
+            *'There is nothing at this address'*) ;;
+            *) echo "::error::the 404 status did not serve the designed 404 page"; fail=1 ;;
+          esac
+
+          # ── THE ARTICLE IS IN THE IMAGE, NOT MERELY ROUTED TO ──────────────────────────────────
+          # The prerender is half the build and it is the half that can go missing without the build
+          # failing: `dist` would hold a shell, nginx would answer 200 for `/`, the healthcheck would
+          # be green, and every page a crawler read would be an empty div.
+          article=$(get /a/nine-ways-people-lose-crypto)
+          case "$article" in
+            *'Nine ways people lose crypto'*) ;;
+            *) echo "::error::the article's own headline is not in the response; the prerender did not run"; fail=1 ;;
+          esac
+          case "$article" in
+            *'<div id="root"><'*) ;;
+            *) echo "::error::the article was served with an empty root div"; fail=1 ;;
+          esac
+
+          # ── THE ORIGIN IS FILLED IN, PER REQUEST, EVERYWHERE ───────────────────────────────────
+          # `sub_filter_once` defaults to ON, which replaces the canonical and ships the other
+          # eleven placeholders raw. That is invisible in a browser and total in a crawler, so the
+          # check is the ABSENCE of the placeholder rather than the presence of one substitution.
+          case "$article" in
+            *'__CF_ORIGIN__'*) echo "::error::an article shipped with the origin placeholder still in it"; fail=1 ;;
+          esac
+          case "$article" in
+            *"https://$host/a/nine-ways-people-lose-crypto"*) ;;
+            *) echo "::error::the article's canonical does not name the host it was fetched from"; fail=1 ;;
+          esac
+          # And the same file, fetched as a different host, says the other thing. This is the whole
+          # argument for the placeholder: one image, two archives, each honest about where it is.
+          other=$(curl -s -m 5 -H 'Host: journal-testnet.cloudsforge.online' \
+                    http://127.0.0.1:8080/a/nine-ways-people-lose-crypto || true)
+          case "$other" in
+            *'https://journal-testnet.cloudsforge.online/a/nine-ways-people-lose-crypto'*) ;;
+            *) echo "::error::the canonical did not follow the request host"; fail=1 ;;
+          esac
+
+          # ── the machine-readable three, which are files and not strings ────────────────────────
+          feed=$(get /feed.xml)
+          case "$feed" in
+            *'<rss'*'Nine ways people lose crypto'*) ;;
+            *) echo "::error::the feed is missing or does not list the articles"; fail=1 ;;
+          esac
+          case "$feed" in
+            *'__CF_ORIGIN__'*) echo "::error::the feed shipped with the placeholder; check sub_filter_types"; fail=1 ;;
+          esac
+          feed_type=$(curl -sI -H "Host: $host" http://127.0.0.1:8080/feed.xml | tr -d '\r' | grep -i '^content-type:' || true)
+          case "$feed_type" in
+            *'application/rss+xml'*) ;;
+            *) echo "::error::the feed is served as '${feed_type:-nothing}'; some readers refuse text/xml"; fail=1 ;;
+          esac
+          sitemap=$(get /sitemap.xml)
+          for path in /a/nine-ways-people-lose-crypto /topics/starting-out /about; do
+            case "$sitemap" in
+              *"<loc>https://$host$path</loc>"*) ;;
+              *) echo "::error::$path is not in the sitemap"; fail=1 ;;
+            esac
+          done
+          case "$sitemap" in
+            *'/search'*) echo "::error::the search page is in the sitemap; it is noindex"; fail=1 ;;
+          esac
+
+          # ── A SECOND ARCHIVE MUST NOT COMPETE WITH THE FIRST IN SEARCH RESULTS ─────────────────
+          # Every article is byte-identical on both networks — there is no chain data in an essay —
+          # so these are not similar pages, they are the same page at two addresses. Left alone, a
+          # search engine picks a canonical and suppresses the other, and which one it picks is not
+          # ours to decide.
+          robots_testnet=$(curl -s -H 'Host: journal-testnet.cloudsforge.online' http://127.0.0.1:8080/robots.txt || true)
+          case "$robots_testnet" in
+            *'Disallow: /'*) ;;
+            *) echo "::error::a non-mainnet hostname does not refuse crawlers"; fail=1 ;;
+          esac
+          case "$robots_testnet" in
+            *'\n'*) echo "::error::the testnet robots.txt contains a literal backslash-n"; fail=1 ;;
+          esac
+          for machine in /sitemap.xml /feed.xml; do
+            env404=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H 'Host: journal-testnet.cloudsforge.online' "http://127.0.0.1:8080$machine" || true)
+            [ "$env404" = "404" ] || { echo "::error::a non-mainnet hostname served $machine ($env404)"; fail=1; }
+          done
+          robots_mainnet=$(get /robots.txt)
+          case "$robots_mainnet" in
+            *'Allow: /'*) ;;
+            *) echo "::error::the mainnet hostname refuses crawlers; this surface exists to be found"; fail=1 ;;
+          esac
+          case "$robots_mainnet" in
+            *"Sitemap: https://$host/sitemap.xml"*) ;;
+            *) echo "::error::robots.txt does not point at the sitemap on this host"; fail=1 ;;
+          esac
+
+          # This public surface must NOT be kept out of an index by a header either.
+          xrobots=$(curl -sI -H "Host: $host" http://127.0.0.1:8080/ | tr -d '\r' | grep -ci '^X-Robots-Tag:' || true)
+          [ "${xrobots:-0}" = "0" ] || { echo "::error::this public surface sends X-Robots-Tag"; fail=1; }
+
+          # ── headers, on every kind of thing this image serves ──────────────────────────────────
+          check() { # url, header, expected-substring, label
+            got=$(curl -sI -H "Host: $host" "$1" | tr -d '\r' | grep -i "^$2:" | cut -d' ' -f2- || true)
+            case "${got:-}" in
+              "") echo "::error::$4 is missing $2"; fail=1 ;;
+              *"$3"*) echo "  ok   $4: $2: $got" ;;
+              *) echo "::error::$4 has the wrong $2 (got '${got:-nothing}', wanted '$3')"; fail=1 ;;
+            esac
+          }
+          asset=$(get / | grep -oE '/assets/[^"]+\.js' | head -1)
+          for target in "/" "/a/nine-ways-people-lose-crypto" "/articles/nine-ways-people-lose-crypto/card.png" "$asset"; do
+            check "http://127.0.0.1:8080$target" X-Content-Type-Options "nosniff" "$target"
+            # SAMEORIGIN rather than DENY: this is public writing and a sibling surface embedding an
+            # article is a use, not an attack. The operator console uses DENY.
+            check "http://127.0.0.1:8080$target" X-Frame-Options "SAMEORIGIN" "$target"
+            check "http://127.0.0.1:8080$target" Referrer-Policy "strict-origin" "$target"
+          done
+          # `no-store` on the HTML is not caution, it is correctness: the body is per-request output
+          # of sub_filter, so a cache keyed on the URL alone can hand the testnet body — canonical
+          # and all — to a mainnet reader.
+          check "http://127.0.0.1:8080/" Cache-Control "no-store" "the archive"
+          check "http://127.0.0.1:8080/a/nine-ways-people-lose-crypto" Cache-Control "no-store" "an article"
+          check "http://127.0.0.1:8080/articles/nine-ways-people-lose-crypto/card.png" Cache-Control "max-age=604800" "a share card"
+          check "http://127.0.0.1:8080$asset" Cache-Control "immutable" "a hashed asset"
+
+          # THE RELEASE IS STAMPED. It is what pins an error report to the deploy that introduced it.
+          case "$(get /)" in
+            *'name="cf-release" content="${{ github.sha }}"'*) ;;
+            *) echo "::error::the release was not stamped into index.html"; fail=1 ;;
+          esac
+
+          # The brand chrome and the artwork are SERVED by the image, not merely committed.
+          for art in favicon-32x32.png favicon-192x192.png favicon-512x512.png og-1200x630.png \
+                     articles/nine-ways-people-lose-crypto/hero.png; do
+            code=$(status "/$art")
+            [ "$code" = "200" ] || { echo "::error::/$art returned $code from the image"; fail=1; }
+          done
+
+          docker rm -f ci-journal-web >/dev/null 2>&1 || true
+          exit $fail
+
+      - name: Down
+        if: always()
+        run: docker rm -f ci-journal-web || true
+
+  hygiene:
+    # The org's reusable secret check. Cheap, and it catches the failure that cannot be undone: a
+    # secret pushed to a repository is compromised the moment it lands, and rotating it is the only
+    # remedy. It matters more on a PUBLIC repository, which this one is.
+    uses: cloudsforge-online/micro-org/.github/workflows/secret-hygiene.yml@main
+    permissions:
+      contents: read
+
+  # ────────────────────────────────────────────────────────────────────────────────────────────────
+  # THE IMAGE, PUBLISHED. The `image` job above is a GATE — it needs `load:` so it can boot the
+  # container and probe it, and it throws the result away. This is the PRODUCER. Different purposes,
+  # so different jobs.
+  #
+  # A frontend with no producer is a manifest entry that can never verify: `cfctl release` pins one
+  # image per deployable, `cfctl release --verify` runs `docker manifest inspect` on every entry, and
+  # `release-deploy.sh` refuses to change anything while one image is missing.
+  #
+  # `packages: write` IS GRANTED HERE rather than asked for inside the shared workflow, and that is
+  # forced rather than stylistic: a called workflow's GITHUB_TOKEN can only be maintained or reduced,
+  # never elevated, so a reusable workflow asking for a permission its caller withheld fails the run
+  # at STARTUP, before a step runs. Measured on micro-org: the run whose caller capped at
+  # `packages: read` ended in startup_failure; the same workflow with a caller granting
+  # `packages: write` succeeded.
+  #
+  # `needs:` names EVERY other job, so nothing is published that did not pass every gate here.
+  # ────────────────────────────────────────────────────────────────────────────────────────────────
+  publish:
+    needs: [check, rules, image, hygiene]
+    # A green push to main and nothing else. An image tag a release manifest pins has to name
+    # something that passed, on the branch it will be deployed from.
+    if: >-
+      github.event_name == 'push' && (github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/heads/design-system/') ||
+      startsWith(github.ref, 'refs/heads/release/'))
+    uses: cloudsforge-online/micro-org/.github/workflows/publish-image.yml@main
+    with:
+      # `web`, so the producer checks micro-ui out as the `uipkg` named build context this
+      # repository's Dockerfile reads. It names ONLY the contexts its kind checked out, because
+      # buildx stats every named context before it opens the Dockerfile.
+      kind: web
+    secrets:
+      estate_token: ${{ secrets.ESTATE_READ_TOKEN }}
+    permissions:
+      contents: read
+      packages: write
