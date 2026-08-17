@@ -181,7 +181,7 @@ test('index.html links four icons and exactly one og block', () => {
   // and the surface whose entire distribution is people sending each other links loses it silently.
   //
   // So the value is written as `__CF_ORIGIN__` — a LITERAL placeholder on disk, substituted by
-  // nginx per request with `$scheme://$host`. That is what makes an absolute URL and a
+  // nginx per request with `https://$host`. That is what makes an absolute URL and a
   // build-once-serve-anywhere image the same thing rather than a contradiction. `nginx.conf` holds
   // the substitution and `test/routes.test.ts` holds the three lines that make it work.
   // ════════════════════════════════════════════════════════════════════════════════════════════

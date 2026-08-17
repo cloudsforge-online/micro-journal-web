@@ -271,8 +271,16 @@ jobs:
           grep -q "ORIGIN_PLACEHOLDER = '__CF_ORIGIN__'" src/lib/meta.ts || {
             echo "::error::the origin placeholder has moved; every absolute URL is now a guess"; exit 1; }
           directives=$(grep -v '^[[:space:]]*#' nginx.conf)
-          grep -qF "sub_filter '__CF_ORIGIN__' '\$scheme://\$host'" <<<"$directives" || {
+          grep -qF "sub_filter '__CF_ORIGIN__' 'https://\$host'" <<<"$directives" || {
             echo "::error::nginx no longer substitutes the origin; every canonical ships a placeholder"; exit 1; }
+          # THE SCHEME IS A LITERAL. `$scheme` is what this file shipped with, and it is `http` on
+          # every request that reaches this container — TLS ends at Cloudflare and both the tunnel
+          # and the gateway speak plain HTTP inward — so every canonical named an http address that
+          # 301s, which a search engine treats as a different URL and discards.
+          if grep -n "sub_filter '__CF_ORIGIN__' '\$scheme" <<<"$directives" | grep .; then
+            echo "::error::the origin is built from \$scheme, which is http behind the tunnel; the canonical would 301"
+            exit 1
+          fi
           # Each of these three is invisible in a browser and total in a crawler.
           grep -q 'sub_filter_once off;' <<<"$directives" || {
             echo "::error::sub_filter_once defaults to ON; only the first of an article's dozen placeholders would be replaced"
@@ -305,8 +313,15 @@ jobs:
             echo "::error::the SPA fallback is back; an article that was never written would answer 200"
             exit 1
           fi
-          grep -qF 'try_files $uri $uri/index.html $uri/ =404;' <<<"$directives" || {
+          grep -qF 'try_files $uri $uri/index.html =404;' <<<"$directives" || {
             echo "::error::the catch-all no longer ends in =404"; exit 1; }
+          # AND NO `$uri/`. It is the only element that matches a directory, and `dist/a/` is a
+          # directory with no index.html — nothing is published at `/a`. With it in the chain `/a`
+          # answered 301 and `/a/` answered 403, neither of which says "there is nothing here".
+          if grep -nE 'try_files[^;]*\$uri/[[:space:]]' <<<"$directives" | grep .; then
+            echo "::error::the chain matches a directory again; /a would 301 instead of 404"
+            exit 1
+          fi
           grep -q 'error_page 404 /404.html' <<<"$directives" || {
             echo "::error::there is no designed page under the real 404 status"; exit 1; }
           echo "ok: unknown addresses answer 404"

@@ -41,7 +41,7 @@
  * ── AND IT NAMES NO HOST ─────────────────────────────────────────────────────────────────────────
  *
  * Every absolute URL is written as the literal `__CF_ORIGIN__`, which nginx replaces with
- * `$scheme://$host` on the way out. `vite.config.ts` has the long version; the short version is that
+ * `https://$host` on the way out. `vite.config.ts` has the long version; the short version is that
  * a canonical tag naming the mainnet host inside the testnet archive does not break anything a
  * person can see, it just quietly hands every search engine a signed statement that the real copy
  * lives on an origin the reader was never on.

@@ -117,7 +117,7 @@
       the prerender uses and asserts it equals what is written here, byte for byte.
 
       `__CF_ORIGIN__` IS NOT A BUILD-TIME VARIABLE. It is a literal string, written to disk, that
-      nginx replaces with `$scheme://$host` per request (see nginx.conf). Absolute URLs are
+      nginx replaces with `https://$host` per request (see nginx.conf). Absolute URLs are
       mandatory in a canonical link, an og:url and a JSON-LD @id — and baking one in would publish
       the mainnet host inside the testnet archive's own canonical tag, quietly de-indexing it in
       favour of an origin the reader was never on. The placeholder is the only form that is correct

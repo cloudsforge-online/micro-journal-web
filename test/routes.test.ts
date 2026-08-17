@@ -136,7 +136,20 @@ test('THE SPA FALLBACK IS ABSENT, AND THE 404 IS A PAGE OF ITS OWN', () => {
   // What replaces it: the prerendered directory lookup. `$uri/index.html` is what turns `/a/<slug>`
   // into the file written at `a/<slug>/index.html` WITHOUT a redirect, so the address a reader was
   // given is the address they keep.
-  assert.match(nginx, /try_files\s+\$uri\s+\$uri\/index\.html\s+\$uri\/\s+=404/)
+  assert.match(nginx, /try_files\s+\$uri\s+\$uri\/index\.html\s+=404/)
+
+  // AND NO `$uri/` ELEMENT. It reads as "also accept a trailing slash" and it is the only element
+  // that matches a DIRECTORY — including `dist/a/`, which has no `index.html` because nothing is
+  // published at `/a`. With it in the chain `/a` answered 301 and `/a/` answered 403: two ways of
+  // not saying "there is nothing here", both of which a crawler follows. Nothing needs it, because
+  // a request for `/topics/` is served by `$uri/index.html` — a doubled slash in a filesystem path
+  // is one slash — and `$uri` alone can never match a directory, since try_files reads the trailing
+  // slash from the LITERAL in nginx.conf at parse time rather than from the expanded value.
+  assert.doesNotMatch(
+    nginx,
+    /try_files[^;]*\$uri\/\s/,
+    'nginx.conf matches a directory again; an address that was never written would 301, not 404',
+  )
 
   // And a 404 page that is a FILE rather than the shell. `/404.html` is in `pageEntries()` with a
   // head of its own; serving `/index.html` under a 404 instead would give every missing address the
@@ -150,7 +163,14 @@ test('THE ORIGIN SUBSTITUTION IS INTACT, INCLUDING THE TWO LINES NOBODY REMEMBER
   // The prerender writes `__CF_ORIGIN__` wherever an absolute URL belongs and nginx fills it in per
   // request. Three things make that work and each fails silently on its own:
   // ══════════════════════════════════════════════════════════════════════════════════════════════
-  assert.match(nginx, /sub_filter\s+'__CF_ORIGIN__'\s+'\$scheme:\/\/\$host'/)
+  assert.match(nginx, /sub_filter\s+'__CF_ORIGIN__'\s+'https:\/\/\$host'/)
+
+  // THE SCHEME IS A LITERAL AND NOT `$scheme`. TLS ends at Cloudflare, the tunnel and the gateway
+  // both speak plain HTTP to this container, so `$scheme` is `http` on every request a reader ever
+  // makes — and a canonical of `http://journal.<apex>/…` names a different URL to a search engine,
+  // one that 301s the moment it is followed. `X-Forwarded-Proto` is no better: the gateway sets no
+  // `forwardedHeaders.trustedIPs`, so Traefik overwrites it with its own entrypoint's scheme.
+  assert.doesNotMatch(nginx, /sub_filter\s+'__CF_ORIGIN__'\s+'\$scheme/)
 
   // ONCE OFF. The default is `on`, which replaces the FIRST match in a response and no others. An
   // article carries a dozen — canonical, og:url, twitter:url, the JSON-LD @id, the author @id, the

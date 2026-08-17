@@ -148,7 +148,7 @@ test('EVERY ROUTE HAS A FILE AND EVERY FILE HAS A ROUTE', () => {
 
 test('THE FILES EXIST WHERE nginx WILL LOOK FOR THEM', (t) => {
   if (!BUILT) return t.skip(NO_BUILD)
-  // `try_files $uri $uri/index.html $uri/ =404` is the whole route table, so a directory with no
+  // `try_files $uri $uri/index.html =404` is the whole route table, so a directory with no
   // `index.html` in it is a 404 with a correct-looking build log. The 404 is the one file that is
   // NOT a directory, because nginx names it directly in `error_page`.
   for (const entry of pageEntries()) {

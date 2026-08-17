@@ -33,7 +33,7 @@
  * search engine a signed statement that the real copy of this article lives somewhere else, and a
  * preview deployment quietly claims to be production.
  *
- * So the placeholder is written to disk and nginx replaces it with `$scheme://$host` on the way out,
+ * So the placeholder is written to disk and nginx replaces it with `https://$host` on the way out,
  * per request (see `nginx.conf`). In the browser the same builders are called with the real origin,
  * so the tags the reader ends up with are the ones already in the file.
  */

@@ -26,7 +26,7 @@ import { defineConfig } from 'vite'
  * for a page production does not have.
  *
  * So the prerender writes the literal `__CF_ORIGIN__` wherever an absolute URL belongs, and nginx
- * replaces it with `$scheme://$host` on the way out — per request, per hostname, with no rebuild.
+ * replaces it with `https://$host` on the way out — per request, per hostname, with no rebuild.
  * See `nginx.conf`, and `test/seo.test.ts`, which asserts no built file carries a cloudsforge
  * hostname and that every placeholder sits in a tag nginx's `sub_filter_types` actually covers.
  */

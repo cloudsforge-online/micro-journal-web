@@ -56,7 +56,7 @@ COPY src ./src
 # The failure is loud (the RUN below exits non-zero) and that is luck rather than design. What it
 # would produce if it were quiet is the thing worth naming: an image whose `dist` is a single
 # `index.html` shell, served by an nginx.conf whose entire route table is
-# `try_files $uri $uri/index.html $uri/ =404`. Entering at `/` and clicking around works perfectly,
+# `try_files $uri $uri/index.html =404`. Entering at `/` and clicking around works perfectly,
 # because the client router is doing it. Every arrival from a search result, a shared link or a feed
 # reader — which is every arrival this surface exists for — gets a 404, and a crawler sees an empty
 # root div and indexes nothing at all.
@@ -102,7 +102,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 #
 # This surface has no such fact, and yet its nginx.conf is the longest in the estate — because it
 # rewrites the response body on the way out (`sub_filter` replacing `__CF_ORIGIN__` with
-# `$scheme://$host`) and decides from `$host` alone whether this hostname is the canonical one. Both
+# `https://$host`) and decides from `$host` alone whether this hostname is the canonical one. Both
 # are derived from the request. Neither needs a variable, and a variable would be WORSE than the
 # derivation: an estate flag saying "this is mainnet" can be wrong on the container it is set on,
 # whereas `$host` is what the reader actually typed.

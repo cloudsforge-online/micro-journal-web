@@ -22,7 +22,7 @@
  * built.
  *
  * It is resolved rather than excepted. The prerender writes the literal string `__CF_ORIGIN__`, and
- * nginx substitutes `$scheme://$host` per REQUEST. So the bytes on disk name no estate, the response
+ * nginx substitutes `https://$host` per REQUEST. So the bytes on disk name no estate, the response
  * names exactly the one it was asked for, and one image still serves localhost, a preview, testnet
  * and mainnet. The tests below hold both halves: nothing under `src/` may name a hostname, and the
  * placeholder must survive from the prerender all the way to the file that is served.
@@ -157,7 +157,7 @@ test('THE PRERENDER WRITES A PLACEHOLDER, NOT AN ORIGIN', () => {
   // And the substitution exists on the other side. Three lines make it work and each one is a
   // separate way to ship a page with `__CF_ORIGIN__` visible in its markup; `test/routes.test.ts`
   // holds all three. This is the coarse check that the rule is present at all.
-  assert.match(NGINX, /sub_filter\s+'__CF_ORIGIN__'\s+'\$scheme:\/\/\$host'/)
+  assert.match(NGINX, /sub_filter\s+'__CF_ORIGIN__'\s+'https:\/\/\$host'/)
   assert.match(NGINX, /sub_filter_once\s+off/)
 })
 

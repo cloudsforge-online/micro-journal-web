@@ -179,7 +179,8 @@ test('THE ABSOLUTE URLs ARE A PLACEHOLDER, IN EVERY TAG THAT NEEDS ONE', () => {
   // A canonical, an `og:url`, an `og:image` and every JSON-LD `@id` must be absolute — no standard
   // accepts a relative one, and the fetchers that read og:image mostly do not resolve one at all.
   // At build time there is no host, so the placeholder is what gets written and nginx substitutes
-  // `$scheme://$host` per request.
+  // `https://$host` per request. The scheme is a literal because TLS ends at Cloudflare: `$scheme`
+  // is `http` on every request that reaches the container, and an http canonical is a URL that 301s.
   //
   // The failure this catches is the one that does not look like a failure: a baked-in host renders
   // perfectly and quietly tells every search engine that the real copy of this article lives on
