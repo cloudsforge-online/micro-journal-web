@@ -300,12 +300,243 @@ function doors(w: number, h: number): string {
   return parts.join('')
 }
 
+/**
+ * ART 6 — "the staircase", for *The difficulty adjustment is not a safety net*.
+ *
+ * Blocks keep arriving at the same spacing along the top rule: that is the thing the retarget
+ * protects, and it never wavers. Underneath, the number that bought it steps down and carries on
+ * stepping. The two halves of the picture are the argument — the cadence held while the price of
+ * holding it fell.
+ */
+function retarget(w: number, h: number): string {
+  const count = 17
+  const rail = h * 0.3
+  const left = w * 0.07
+  const step = (w * 0.86) / (count - 1)
+  const size = h * 0.034
+  const parts: string[] = [
+    `<i style="position:absolute;left:${left}px;top:${rail}px;width:${w * 0.9}px;height:1px;background:${RULE}"></i>`,
+  ]
+  for (let i = 0; i < count; i += 1) {
+    const x = left + i * step
+    parts.push(
+      `<i style="position:absolute;left:${x - size / 2}px;top:${rail - size}px;width:${size}px;height:${size}px;background:${RULE};opacity:0.95"></i>`,
+    )
+  }
+  // Four flats, three drops, and the last flat running off the right edge rather than stopping.
+  const xs = [0.05, 0.29, 0.5, 0.71, 1.05]
+  const ys = [0.5, 0.6, 0.68, 0.74]
+  const points: [number, number][] = [[w * (xs[0] as number), h * (ys[0] as number)]]
+  ys.forEach((y, i) => {
+    points.push([w * (xs[i + 1] as number), h * y])
+    const next = ys[i + 1]
+    if (next !== undefined) points.push([w * (xs[i + 1] as number), h * next])
+    // A shadow under each flat rather than one rectangle under the lot, so the top of the glow
+    // follows the line down instead of cutting a hard horizontal edge across the picture.
+    parts.push(
+      `<i style="position:absolute;left:${w * (xs[i] as number)}px;top:${h * y}px;width:${w * ((xs[i + 1] as number) - (xs[i] as number))}px;height:${h * 0.14}px;background:linear-gradient(to bottom, rgba(174,123,61,0.18), transparent)"></i>`,
+    )
+  })
+  parts.push(polyline(points, BRONZE, 5))
+  return parts.join('')
+}
+
+/**
+ * ART 7 — "the branch that stopped", for *Two blocks in eight hours*.
+ *
+ * The fork did exactly what it said it would: it produced a chain. Then it produced two blocks in
+ * eight hours and went quiet. The upper branch keeps the spacing it always had; the lower one has
+ * two marks and then nothing, and the nothing is drawn as fading ticks so the eye follows it out.
+ */
+function fork(w: number, h: number): string {
+  const size = h * 0.062
+  const mid = h * 0.5
+  const left = w * 0.1
+  const step = w * 0.07
+  const split = 4
+  const parts: string[] = []
+  const mark = (x: number, y: number, colour: string, opacity: number): string =>
+    `<i style="position:absolute;left:${x - size / 2}px;top:${y - size / 2}px;width:${size}px;height:${size}px;background:${colour};opacity:${opacity}"></i>`
+
+  // The shared history, on one rule.
+  for (let i = 0; i <= split; i += 1) {
+    const x = left + i * step
+    if (i > 0) parts.push(stroke([x - step, mid], [x, mid], RULE, 2))
+    parts.push(mark(x, mid, RULE, 0.95))
+  }
+
+  const junction = left + split * step
+  const rise = h * 0.17
+  // The branch that kept going.
+  parts.push(stroke([junction, mid], [junction + step, mid - rise], BRONZE, 2))
+  for (let i = 1; i <= 7; i += 1) {
+    const x = junction + i * step
+    if (i > 1) parts.push(stroke([x - step, mid - rise], [x, mid - rise], BRONZE, 2))
+    parts.push(mark(x, mid - rise, BRONZE, 0.9))
+  }
+
+  // The branch that made two and stalled.
+  parts.push(stroke([junction, mid], [junction + step, mid + rise], RULE, 2))
+  parts.push(mark(junction + step, mid + rise, MUTED, 0.75))
+  parts.push(stroke([junction + step, mid + rise], [junction + step * 2, mid + rise], RULE, 2))
+  parts.push(mark(junction + step * 2, mid + rise, MUTED, 0.4))
+  for (let i = 0; i < 5; i += 1) {
+    const x = junction + step * 2.6 + i * (step * 0.55)
+    parts.push(
+      `<i style="position:absolute;left:${x}px;top:${mid + rise - 1}px;width:${step * 0.22}px;height:2px;background:${RULE};opacity:${(0.55 - i * 0.11).toFixed(2)}"></i>`,
+    )
+  }
+  parts.push(
+    `<i style="position:absolute;left:${junction - step}px;top:${mid - rise - size}px;width:${step * 9}px;height:${size * 2.4}px;background:radial-gradient(ellipse at 30% 50%, rgba(174,123,61,0.2), transparent 72%)"></i>`,
+  )
+  return parts.join('')
+}
+
+/**
+ * ART 8 — "the key was already out", for *A tenth way to lose crypto*.
+ *
+ * The device is sealed, the keyhole is intact, nothing has been forced. The key is lying outside it,
+ * on the far side of the case, because it left in the factory — which is the piece's whole point and
+ * the reason none of the reader's habits would have caught it.
+ */
+function keyhole(w: number, h: number): string {
+  const caseW = w * 0.84
+  const caseH = h * 0.56
+  const caseX = (w - caseW) / 2
+  const caseY = (h - caseH) / 2
+  const dw = caseW * 0.34
+  const dh = caseH * 0.72
+  const dx = caseX + caseW * 0.08
+  const dy = caseY + (caseH - dh) / 2
+  const bore = dw * 0.12
+  const cx = dx + dw / 2
+  const cy = dy + dh * 0.44
+  const parts: string[] = [
+    `<i style="position:absolute;left:${caseX}px;top:${caseY}px;width:${caseW}px;height:${caseH}px;border:1px solid ${RULE};box-sizing:border-box"></i>`,
+    `<i style="position:absolute;left:${caseX + caseW * 0.46}px;top:${caseY}px;width:1px;height:${caseH}px;background:${RULE_FAINT}"></i>`,
+    // The device: sealed, no seam, one dark face.
+    `<i style="position:absolute;left:${dx}px;top:${dy}px;width:${dw}px;height:${dh}px;border:2px solid ${BRONZE};background:${INK_DEEP};box-sizing:border-box;border-radius:${dw * 0.08}px"></i>`,
+    `<i style="position:absolute;left:${dx + dw * 0.18}px;top:${dy + dh * 0.12}px;width:${dw * 0.64}px;height:2px;background:${RULE}"></i>`,
+    // The keyhole: a bore and the slot beneath it. Drawn in the light grey rather than in the ink,
+    // because a hole cut into a face this dark is invisible unless something is behind it.
+    `<i style="position:absolute;left:${cx - bore}px;top:${cy - bore}px;width:${bore * 2}px;height:${bore * 2}px;border-radius:50%;background:${MUTED}"></i>`,
+    `<i style="position:absolute;left:${cx - bore * 0.55}px;top:${cy}px;width:${bore * 1.1}px;height:${dh * 0.3}px;background:${MUTED};clip-path:polygon(32% 0%, 68% 0%, 100% 100%, 0% 100%)"></i>`,
+  ]
+  // The key, lying flat on the far side of the case: a bow, a shaft, two teeth.
+  const kx = caseX + caseW * 0.6
+  const ky = caseY + caseH * 0.5
+  const bow = h * 0.055
+  const shaft = caseW * 0.28
+  parts.push(
+    `<i style="position:absolute;left:${kx}px;top:${ky - bow}px;width:${bow * 2}px;height:${bow * 2}px;border-radius:50%;border:${bow * 0.42}px solid ${BRONZE_HOT};box-sizing:border-box"></i>`,
+  )
+  parts.push(stroke([kx + bow * 2, ky], [kx + bow * 2 + shaft, ky], BRONZE_HOT, bow * 0.34))
+  parts.push(
+    `<i style="position:absolute;left:${kx + bow * 2 + shaft * 0.72}px;top:${ky}px;width:${bow * 0.3}px;height:${bow * 0.7}px;background:${BRONZE_HOT}"></i>`,
+  )
+  parts.push(
+    `<i style="position:absolute;left:${kx + bow * 2 + shaft * 0.88}px;top:${ky}px;width:${bow * 0.3}px;height:${bow * 1.05}px;background:${BRONZE_HOT}"></i>`,
+  )
+  parts.push(
+    `<i style="position:absolute;left:${kx - bow}px;top:${ky - bow * 2.4}px;width:${shaft + bow * 4}px;height:${bow * 4.8}px;background:radial-gradient(ellipse at 40% 50%, rgba(226,168,95,0.18), transparent 70%)"></i>`,
+  )
+  return parts.join('')
+}
+
+/**
+ * ART 9 — "the premium", for *The premium was the product*.
+ *
+ * One column in two parts: the coins at the bottom, which have not moved, and the bronze above them,
+ * which is what the market used to pay on top and is on its way down to meet them. The ghost rules
+ * are where the top of the bronze stood at each earlier mark.
+ */
+function premium(w: number, h: number): string {
+  const base = h * 0.82
+  const barW = w * 0.16
+  const x = w * 0.5 - barW / 2
+  const assetH = h * 0.2
+  const premiumH = h * 0.3
+  const wasTop = h * 0.16
+  const top = base - assetH - premiumH
+  const parts: string[] = [
+    `<i style="position:absolute;left:${w * 0.16}px;top:${base}px;width:${w * 0.68}px;height:1px;background:${RULE}"></i>`,
+    // The shorter bar underneath: the coins, which have not moved.
+    `<i style="position:absolute;left:${x}px;top:${base - assetH}px;width:${barW}px;height:${assetH}px;background:${RULE};opacity:0.95"></i>`,
+    // The taller bar on top: what the market paid over them, on its way down to meet them.
+    `<i style="position:absolute;left:${x}px;top:${top}px;width:${barW}px;height:${premiumH}px;background:linear-gradient(to top, ${BRONZE}, ${BRONZE_HOT})"></i>`,
+    `<i style="position:absolute;left:${x}px;top:${base - assetH}px;width:${barW}px;height:2px;background:${INK}"></i>`,
+    // Where the top of it stood before.
+    `<i style="position:absolute;left:${x}px;top:${wasTop}px;width:${barW}px;height:${top - wasTop}px;border:1px dashed ${RULE};border-bottom:none;box-sizing:border-box"></i>`,
+  ]
+  const ghosts = [0.29, 0.25, 0.21, 0.17]
+  ghosts.forEach((level, i) => {
+    parts.push(
+      `<i style="position:absolute;left:${x - w * 0.035}px;top:${h * level}px;width:${barW + w * 0.07}px;height:1px;background:${BRONZE};opacity:${(0.45 - i * 0.09).toFixed(2)}"></i>`,
+    )
+  })
+  parts.push(
+    `<i style="position:absolute;left:${x - w * 0.04}px;top:${top - h * 0.03}px;width:${barW + w * 0.08}px;height:${premiumH + h * 0.06}px;background:radial-gradient(ellipse at 50% 60%, rgba(226,168,95,0.16), transparent 72%)"></i>`,
+  )
+  return parts.join('')
+}
+
+/**
+ * ART 10 — "less money, going round faster", for *The stablecoin float is the wrong number*.
+ *
+ * The stack on the left is the figure everybody quotes, and it is getting shorter. The loop on the
+ * right is the figure nobody quotes, and it is the same dollar coming past again. Drawn as one arc
+ * overlapping itself rather than a circle, because the point is the repetition.
+ */
+function circulation(w: number, h: number): string {
+  const parts: string[] = []
+  const coinW = w * 0.18
+  const coinH = h * 0.062
+  const cx = w * 0.26
+  const floor = h * 0.72
+  const pitch = coinH * 0.74
+  // Four coins still there, and three outlines above them where the stack used to reach.
+  for (let i = 0; i < 7; i += 1) {
+    const y = floor - (i + 1) * pitch
+    const gone = i >= 4
+    parts.push(
+      `<i style="position:absolute;left:${cx - coinW / 2}px;top:${y}px;width:${coinW}px;height:${coinH}px;` +
+        `border-radius:50%;border:${gone ? `1px dashed ${RULE}` : `2px solid ${MUTED}`};box-sizing:border-box;` +
+        `background:${gone ? 'transparent' : INK_DEEP};opacity:${gone ? (0.5 - (i - 4) * 0.13).toFixed(2) : '1'}"></i>`,
+    )
+  }
+  parts.push(
+    `<i style="position:absolute;left:${cx - coinW * 0.8}px;top:${floor}px;width:${coinW * 1.6}px;height:1px;background:${RULE}"></i>`,
+  )
+  // The loop: four passes of one wide arc, each turned a little, so it reads as a line coming back
+  // past the same point rather than as a circle somebody drew.
+  const lx = w * 0.66
+  const ly = h * 0.48
+  const loopW = w * 0.36
+  const loopH = h * 0.34
+  for (let i = 0; i < 4; i += 1) {
+    parts.push(
+      `<i style="position:absolute;left:${lx - loopW / 2}px;top:${ly - loopH / 2}px;width:${loopW}px;height:${loopH}px;` +
+        `border-radius:50%;border:3px solid ${i === 0 ? BRONZE_HOT : BRONZE};box-sizing:border-box;` +
+        `opacity:${(0.9 - i * 0.16).toFixed(2)};transform:rotate(${i * 9 - 5}deg)"></i>`,
+    )
+  }
+  parts.push(
+    `<i style="position:absolute;left:${lx - loopW * 0.75}px;top:${ly - loopH * 0.95}px;width:${loopW * 1.5}px;height:${loopH * 1.9}px;background:radial-gradient(ellipse at 50% 50%, rgba(174,123,61,0.16), transparent 68%)"></i>`,
+  )
+  return parts.join('')
+}
+
 const ART: Record<string, (w: number, h: number) => string> = {
   'crypto-without-the-crypto-words': ledger,
   'why-we-built-our-own-chain': cadence,
   'a-tour-of-cloudsforge': bench,
   'the-healthy-way-to-hold-crypto': settle,
   'nine-ways-people-lose-crypto': doors,
+  'the-difficulty-adjustment-is-not-a-safety-net': retarget,
+  'two-blocks-in-eight-hours': fork,
+  'a-tenth-way-to-lose-crypto': keyhole,
+  'the-premium-was-the-product': premium,
+  'the-stablecoin-float-is-the-wrong-number': circulation,
 }
 
 /** The faces the estate already ships, loaded off disk so the PNG is set in the estate's type. */
@@ -414,7 +645,7 @@ for (const article of ARTICLES) {
 /*
  * The publication's own share card, for `/`, `/topics`, `/about` and the 404 — every page that is
  * not one article. It is the same materials with no artwork behind it, because the archive is not
- * about any one of the five things above.
+ * about any one of the things drawn above.
  */
 const dir = join(root, 'public')
 await page.setViewportSize(CARD)

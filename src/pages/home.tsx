@@ -9,7 +9,7 @@
  * do the editing. So the front page makes one editorial decision, which is the one a front page
  * exists to make: this is the piece to read first.
  *
- * There is no pagination and no "load more". Five articles fit; the day they do not, the fix is a
+ * There is no pagination and no "load more". Ten articles fit; the day they do not, the fix is a
  * year index, not a second page of the same list — `lib/routes.ts` records why neither exists yet.
  */
 import { Link } from 'react-router-dom'

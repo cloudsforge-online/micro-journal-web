@@ -41,6 +41,12 @@ export const TAGS: readonly Tag[] = [
     blurb:
       'The part nobody writes about: what holding a volatile thing does to your week, and how to hold it without it holding you.',
   },
+  {
+    slug: 'the-wider-world',
+    name: 'The wider world',
+    blurb:
+      'What happened on somebody else\'s chain, in somebody else\'s filings, read by people who run one and have to make the same decisions.',
+  },
 ]
 
 export function tagBySlug(slug: string): Tag | undefined {
