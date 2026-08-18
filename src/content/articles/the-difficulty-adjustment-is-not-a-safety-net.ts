@@ -18,7 +18,7 @@ export const article: Article = {
   body: [
     {
       kind: 'lead',
-      text: 'On 8 August the Bitcoin network adjusted its mining difficulty upward by just under one per cent, to 127.48 trillion. Nothing about that number is dramatic, which is exactly the thing worth noticing. Arriving at a boring number this year has taken three of the largest downward adjustments the chain has ever made and the quiet departure of enough machines to leave difficulty roughly a fifth below the record it set last November. The mechanism that turned all of that into "no change worth mentioning" is the most consistently misread piece of equipment in this field.',
+      text: 'On 8 August the Bitcoin network adjusted its mining difficulty upward by just under one per cent, to 127.48 trillion. Nothing about that number is dramatic, which is exactly the thing worth noticing. Arriving at a boring number this year has taken three of the largest downward adjustments the chain has ever made and the quiet departure of enough machines to leave difficulty roughly a fifth below the record of 155.97 trillion it set on 29 October last year. The mechanism that turned all of that into "no change worth mentioning" is the most consistently misread piece of equipment in this field.',
     },
     { kind: 'h2', text: 'What the retarget actually does', id: 'the-retarget' },
     {

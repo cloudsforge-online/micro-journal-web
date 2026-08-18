@@ -18,7 +18,7 @@ export const article: Article = {
   body: [
     {
       kind: 'lead',
-      text: 'In June the total supply of stablecoins fell by $7.7bn, the largest monthly contraction since Terra collapsed in May 2022. The market is down about $10bn from its May peak to roughly $300bn, the first sustained shrinkage in four years. In that same June, stablecoins moved $1.79 trillion in adjusted volume — an all-time record, 63 per cent above May and 125 per cent above the June before it.',
+      text: 'In June the total supply of stablecoins fell by $7.8bn, the largest monthly contraction since Terra collapsed in May 2022. July fell another $4.1bn, and back-to-back months of shrinkage had not happened since 2023: the float peaked at $319bn on 31 May and sits at $308bn today. In that same June, stablecoins moved $1.79 trillion in adjusted volume — an all-time record, 63 per cent above May and 125 per cent above the June before it.',
     },
     {
       kind: 'p',
@@ -128,7 +128,7 @@ export const article: Article = {
     {
       kind: 'ul',
       items: [
-        '[Forbes, on the first contraction in four years](https://www.forbes.com/sites/zennonkapron/2026/07/27/the-stablecoin-market-is-shrinking-for-the-first-time-in-four-years/) — the $7.7bn June drop, the fall from the May peak, the USDT and USDC breakdown, and the record $1.79 trillion of June volume.',
+        '[DefiLlama\'s stablecoin supply series](https://defillama.com/stablecoins) — every supply figure above is read from it directly rather than from anybody\'s summary of it: the $319bn peak on 31 May, the $7.8bn June fall, the $4.1bn July fall, and the fact that the last back-to-back monthly contraction was in 2023.',
         '[Standard Chartered research](https://www.sc.com/en/insights/) — Geoff Kendrick on turnover at roughly six times a month, and on what that does to a supply forecast.',
         '[Visa\'s stablecoin analytics](https://visaonchainanalytics.com/) — the velocity comparison with M1, and the adjusted-volume methodology that strips out bot and inorganic activity.',
         '[Artemis on real-world stablecoin payments](https://www.artemis.xyz/research) — the roughly one per cent of movement that is actual payments, and the B2B, payroll and settlement split.',
