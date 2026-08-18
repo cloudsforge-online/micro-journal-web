@@ -1,5 +1,5 @@
 /**
- * The five topics, each with the sentence its own page leads on.
+ * The six topics, each with the sentence its own page leads on.
  *
  * `populatedTags()` rather than `TAGS`, and `content/index.ts` records why: a test asserts they are
  * the same list, and a derivation that CANNOT link an empty page is still better than a test saying
@@ -14,8 +14,9 @@ import { topicsHead } from '../lib/meta.ts'
 import { topicPath } from '../lib/routes.ts'
 
 export const TOPICS_DESCRIPTION =
-  'Five subjects this journal keeps returning to: starting out, staying safe, the Hearth chain, ' +
-  'the CloudsForge ecosystem, and what living with a volatile thing actually does to your week.'
+  'Six subjects this journal keeps returning to: starting out, staying safe, the Hearth chain, ' +
+  'the CloudsForge ecosystem, what living with a volatile thing actually does to your week, and ' +
+  'what happens on everybody else\'s chain.'
 
 export function TopicsPage() {
   const tags = populatedTags()

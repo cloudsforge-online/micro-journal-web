@@ -40,7 +40,7 @@ export interface AppRoute {
  *   `''`        — the archive. Every article, newest first, with the newest given the whole width.
  *   `a`         — one article. `/a/<slug>`, and the slug never changes once published, because it
  *                 is the address somebody has already shared.
- *   `topics`    — the five topics, and one page each. Closed set; see `content/tags.ts`.
+ *   `topics`    — the six topics, and one page each. Closed set; see `content/tags.ts`.
  *   `about`     — what this is, who writes it, and how to subscribe without an account.
  *   `search`    — the whole corpus, searched in the reader's own browser. See `content/index.ts`.
  *

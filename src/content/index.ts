@@ -17,7 +17,7 @@
  *     should do nothing at all until somebody adds the line here — that is what makes the folder
  *     safe to work in.
  *
- * Eight lines of imports against a category of silent failure is a good trade.
+ * A line of imports per article against a category of silent failure is a good trade.
  */
 import type { Article } from './types.ts'
 import { TAGS } from './tags.ts'
@@ -26,6 +26,11 @@ import { article as whyWeBuiltOurOwnChain } from './articles/why-we-built-our-ow
 import { article as aTourOfCloudsforge } from './articles/a-tour-of-cloudsforge.ts'
 import { article as theHealthyWayToHoldCrypto } from './articles/the-healthy-way-to-hold-crypto.ts'
 import { article as nineWaysPeopleLoseCrypto } from './articles/nine-ways-people-lose-crypto.ts'
+import { article as theDifficultyAdjustmentIsNotASafetyNet } from './articles/the-difficulty-adjustment-is-not-a-safety-net.ts'
+import { article as twoBlocksInEightHours } from './articles/two-blocks-in-eight-hours.ts'
+import { article as aTenthWayToLoseCrypto } from './articles/a-tenth-way-to-lose-crypto.ts'
+import { article as thePremiumWasTheProduct } from './articles/the-premium-was-the-product.ts'
+import { article as theStablecoinFloatIsTheWrongNumber } from './articles/the-stablecoin-float-is-the-wrong-number.ts'
 
 /**
  * The archive, newest first.
@@ -34,6 +39,11 @@ import { article as nineWaysPeopleLoseCrypto } from './articles/nine-ways-people
  * the dates in the articles and not of anybody's diff. `publishedAt` is an ISO date, which sorts
  * lexicographically, so the comparison needs no Date object — and a Date object is exactly what a
  * prerender must not depend on, because two builds of one commit have to produce identical bytes.
+ *
+ * The comparator returns 0 for two pieces published on one day, and `Array.prototype.sort` is
+ * specified as stable, so same-day articles keep the order they are written in below. That is the
+ * only thing the order of this list controls, and it is why several pieces from one day are listed
+ * in the order they should be read rather than alphabetically.
  */
 export const ARTICLES: readonly Article[] = [
   cryptoWithoutTheCryptoWords,
@@ -41,6 +51,11 @@ export const ARTICLES: readonly Article[] = [
   aTourOfCloudsforge,
   theHealthyWayToHoldCrypto,
   nineWaysPeopleLoseCrypto,
+  theDifficultyAdjustmentIsNotASafetyNet,
+  twoBlocksInEightHours,
+  aTenthWayToLoseCrypto,
+  thePremiumWasTheProduct,
+  theStablecoinFloatIsTheWrongNumber,
 ]
   .slice()
   .sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : a.publishedAt > b.publishedAt ? -1 : 0))
@@ -70,9 +85,9 @@ export function lastChangedAt(): string {
  * Up to three more to read, for the foot of an article.
  *
  * Ranked by shared tags, then by recency, and NEVER including the article itself. Written as a
- * plain sort rather than anything cleverer because the archive is small: at five articles a
- * similarity model and `filter(sort(...))` produce identical output, and only one of them can be
- * read in a code review.
+ * plain sort rather than anything cleverer because the archive is small: at ten articles a
+ * similarity model and `filter(sort(...))` produce nearly identical output, and only one of them
+ * can be read in a code review.
  *
  * It always returns something — falling back to the newest others — because a related-articles
  * block that renders empty on the one article nobody else shares a tag with is a hole in the page
@@ -113,7 +128,7 @@ export function populatedTags(): readonly { slug: string; name: string; count: n
  * ── THE SEARCH IS IN THE BROWSER, AND THAT IS THE WHOLE DESIGN ───────────────────────────────────
  *
  * There is no search service and no search API, because there is nothing to ask: the entire corpus
- * is five articles that are already in the bundle the reader has downloaded. A round trip to ask a
+ * is ten articles that are already in the bundle the reader has downloaded. A round trip to ask a
  * server about text the browser is holding would be slower, would need a service to deploy, and
  * would put a log of what every reader searched for on a machine we own. None of those is a cost
  * worth paying at this size, and the day the archive is large enough for it to be, the shape of
