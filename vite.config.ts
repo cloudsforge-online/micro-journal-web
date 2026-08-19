@@ -32,6 +32,22 @@ import { defineConfig } from 'vite'
  */
 export default defineConfig({
   plugins: [react()],
+  // ── THE MOUNT, AND IT IS NOT A BUILD-TIME CONFIGURATION ─────────────────────────────────────────
+  //
+  // The paragraph above refuses `define` and `envPrefix` because they bake an ENVIRONMENT into an
+  // image. This bakes an ADDRESS, and the distinction is the whole of it: `/journal` is the same on
+  // localhost, on testnet, on mainnet and in a preview, because it is a fact about how the estate
+  // composes this surface's URLs rather than about which estate is serving it. The origin is still
+  // the thing that varies and is still `__CF_ORIGIN__`, filled in per request by nginx.
+  //
+  // It is `subdomain: ''` + `basePath: '/journal'` in `ui/packages/ui/src/surfaces.ts`, and
+  // `src/lib/routes.ts` holds the copy this bundle reads — see `BASE` there for the router-path /
+  // public-path distinction that the rest of the repository turns on.
+  //
+  // TRAILING SLASH REQUIRED. vite joins `base` to an asset name by concatenation, so `/journal`
+  // emits `/journalassets/index-a1b2.js` — a 404 for the bundle on every page, with a build that
+  // succeeds and a dev server that is unaffected because it serves from memory.
+  base: '/journal/',
   resolve: {
     // @cloudsforge/ui is a `link:` dependency, so its own node_modules holds a second copy of
     // React. Two copies means two dispatchers, and the shared bar throws on its first useState.

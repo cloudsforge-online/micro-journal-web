@@ -59,7 +59,8 @@ import { TAGS, tagBySlug } from '../src/content/tags.ts'
 import { pageEntries } from '../src/lib/heads.ts'
 import { SURFACE_DESCRIPTION } from '../src/lib/hosts.ts'
 import { HEAD_END, HEAD_START, ORIGIN_PLACEHOLDER, PUBLICATION, renderHead } from '../src/lib/meta.ts'
-import { feedXml, journalSitemap, robotsTxt, sitemapXml } from '../src/lib/syndication.ts'
+import { BASE, publicPath } from '../src/lib/routes.ts'
+import { feedXml, journalSitemap, sitemapXml } from '../src/lib/syndication.ts'
 import { routeChildren } from '../src/routes-tree.tsx'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -71,12 +72,18 @@ const dist = join(root, 'dist')
  * Router ships that takes a location as a plain string and never looks for a `window` to read one
  * from. The layout is `StaticShell`; everything below it is the same `routeChildren()` the browser
  * renders, which is what keeps the two from drifting.
+ *
+ * `basename` and a PUBLIC location, matching `src/app.tsx` — and the pair has to be given together.
+ * The router strips the basename to match, so the argument must carry it; `<Link>` then re-emits it,
+ * which is the only reason the anchors in the file on disk say `/journal/a/<slug>`. Pass a router
+ * path here and React Router throws at build time rather than writing bad markup, which is the one
+ * mercy in this pairing.
  */
 function renderRoute(path: string): string {
   return renderToStaticMarkup(
     createElement(
       StaticRouter,
-      { location: path },
+      { basename: BASE, location: publicPath(path) },
       createElement(Routes, null, createElement(Route, { element: createElement(StaticShell) }, routeChildren())),
     ),
   )
@@ -125,18 +132,33 @@ for (const entry of pageEntries()) {
 }
 
 /*
- * The three files that are for machines only.
+ * The two files that are for machines only.
  *
  * The FEED carries every article in full — `content:encoded` with the whole body — rather than an
  * extract. An extract exists to make a reader click through to see advertising, and there is none
  * here; a feed reader that shows the whole piece is simply a better way to read it.
  *
  * The SITEMAP is this publication's own, and does not replace the estate's. The shared
- * `@cloudsforge/ui/sitemap` lists one URL per SURFACE — thirteen of them — which is the right
- * document for the marketing site to point at and says nothing about the forty addresses here.
+ * `@cloudsforge/ui/sitemap` lists one URL per SURFACE, which is the right document for the marketing
+ * site to point at and says nothing about the forty addresses here. A sitemap may live at any path
+ * as long as every `<loc>` in it sits under that path, which is exactly the shape of this one —
+ * `/journal/sitemap.xml` listing `/journal/…`.
  *
- * ROBOTS disallows `/search` and nothing else. The `noindex` on that page stops the indexing and the
- * disallow stops the fetch; both are needed, because a crawler has to fetch a page to read a tag.
+ * ── AND THERE IS NO robots.txt HERE ANY MORE, WHICH THE MOVE TO A FOLDER DECIDED ─────────────────
+ *
+ * It was written here for as long as this publication was a hostname, and it disallowed `/search`:
+ * a search page generates a distinct address for every string anybody has ever typed, and a crawler
+ * that follows them files each one as a page of this archive.
+ *
+ * `robots.txt` is read at the ORIGIN ROOT and nowhere else. `/journal/robots.txt` is a file no
+ * crawler will ever request — so keeping it would have left the only copy of that rule in a
+ * document nothing reads, while `/journal/search?q=…` became crawlable for the first time. The rule
+ * moved to the apex's own robots.txt in micro-site, together with the `Sitemap:` line pointing at
+ * the file written below.
+ *
+ * The `$cf_env` gate went with it, and is better there: the apex already answers `Disallow: /` on
+ * every non-mainnet hostname, so the testnet archive is covered by the host it is served from
+ * rather than by a rule this repository has to remember to keep.
  */
 process.stdout.write('prerender: syndication\n')
 write(
@@ -153,6 +175,5 @@ write(
   'sitemap.xml',
   sitemapXml(journalSitemap(ARTICLES, TAGS, lastChangedAt()), ORIGIN_PLACEHOLDER),
 )
-write('robots.txt', robotsTxt(ORIGIN_PLACEHOLDER))
 
-process.stdout.write(`prerender: ${pageEntries().length} pages, 3 machine files\n`)
+process.stdout.write(`prerender: ${pageEntries().length} pages, 2 machine files\n`)

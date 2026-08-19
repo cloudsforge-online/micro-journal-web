@@ -44,6 +44,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { ACCENT_SURFACE } from '../src/lib/hosts.ts'
+import { BASE, FEED_PATH } from '../src/lib/routes.ts'
 import { ARTICLES } from '../src/content/index.ts'
 import { ROOT, SIBLINGS, read, stripComments } from './sources.ts'
 
@@ -185,13 +186,48 @@ test('index.html links four icons and exactly one og block', () => {
   // build-once-serve-anywhere image the same thing rather than a contradiction. `nginx.conf` holds
   // the substitution and `test/routes.test.ts` holds the three lines that make it work.
   // ════════════════════════════════════════════════════════════════════════════════════════════
-  assert.match(HTML, /property="og:image" content="__CF_ORIGIN__\/og-1200x630\.png"/)
-  assert.match(HTML, /name="twitter:image" content="__CF_ORIGIN__\/og-1200x630\.png"/)
+  // ── AND IT CARRIES THE MOUNT, WHICH IS A SECOND ADDRESS ENTIRELY ────────────────────────────────
+  //
+  // `og-1200x630.png` ships inside THIS bundle, so its real address is `<origin>/journal/…`. Written
+  // without the mount it names the apex's own card — a file that exists, at micro-site's address,
+  // and answers 200 with the marketing site's picture. Nothing 404s and nothing errors: a link to
+  // an article simply unfurls in somebody else's chat window with the wrong company artwork on it,
+  // which is the failure that survives every check that only asks whether the URL resolves.
+  assert.match(
+    HTML,
+    new RegExp(`property="og:image" content="__CF_ORIGIN__${BASE}/og-1200x630\\.png"`),
+  )
+  assert.match(
+    HTML,
+    new RegExp(`name="twitter:image" content="__CF_ORIGIN__${BASE}/og-1200x630\\.png"`),
+  )
   assert.doesNotMatch(
     HTML,
     /(?:og|twitter):image" content="\//,
     'a root-relative og:image is invisible to most link-preview fetchers; use __CF_ORIGIN__',
   )
+})
+
+test('THE ICONS ARE ROOT-RELATIVE AND THE FEED LINK IS NOT, AND BOTH ARE RIGHT', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // THE ONE PLACE IN THIS REPOSITORY WHERE TWO ADJACENT LINES DISAGREE ABOUT THE MOUNT ON PURPOSE.
+  //
+  // vite rewrites asset references in `index.html` against `base` — that is what `base: '/journal/'`
+  // buys — but it does that for the extensions it recognises as assets and NOT for `.xml`. Settled
+  // by building and reading `dist/index.html` rather than from the documentation, which does not say.
+  //
+  // So the four icon hrefs are written root-relative and come out mounted; the feed href is written
+  // mounted and comes out unchanged. Writing either one the other way is silently wrong in a
+  // different direction — `/journal/journal/favicon-32x32.png` for a doubled icon, a subscribe link
+  // that 404s in a reader's feed application for an unmounted feed — and neither is visible on the
+  // page. `test/seo.test.ts` asserts the same pair against `dist`, which is where it is a fact
+  // rather than an intention.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  for (const icon of BORROWED.filter((name) => name.startsWith('favicon-'))) {
+    assert.match(HTML, new RegExp(`href="/${icon.replace('.', '\\.')}"`))
+    assert.doesNotMatch(HTML, new RegExp(`href="${BASE}/${icon.replace('.', '\\.')}"`))
+  }
+  assert.match(HTML, new RegExp(`type="application/rss\\+xml"[^>]*href="${FEED_PATH}"`))
 })
 
 test('THE ACCENT SELECTOR THIS PAGE NAMES REALLY EXISTS', () => {

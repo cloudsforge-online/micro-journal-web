@@ -40,10 +40,26 @@ import { afterEach, describe, it } from 'node:test'
 import { installWindow, removeWindow } from './browser-stubs.ts'
 import { setViewedNetwork, viewedHosts, viewedNetwork, viewedSurfaceUrl } from '../src/lib/viewed.ts'
 
-/** A real address on this surface, on the mainnet estate. */
-const PAGE = 'https://journal.cloudsforge.online/'
+/**
+ * A real address on this surface, on the mainnet estate.
+ *
+ * ── IT IS A PATH ON THE APEX, AND WRITING IT AS A HOSTNAME MAKES EVERY TEST BELOW PASS WRONGLY ──
+ *
+ * This was `https://journal.cloudsforge.online/` until the surface became a folder, and it is worth
+ * spelling out why that string is not merely stale but actively misleading. `KNOWN_SUBS` is built
+ * from the registry's non-empty subdomains, so the day this row's became `''` the label `journal`
+ * left the set — and `cloudsforgeHosts()` leaves an unknown first label ALONE, because a preview
+ * deployment is its own apex. A test still pointed at the old name therefore derives the apex
+ * `journal.cloudsforge.online` and composes `https://network.journal.cloudsforge.online/faucet`:
+ * a hostname with no DNS record, produced by code that is behaving exactly as designed, asserted
+ * against by a suite that would have gone green if I had simply updated the expectations to match.
+ *
+ * The address here is the address a reader is at, and the assertions are what the estate must
+ * compose from it. `micro-deploy` sends the old hostname here with a 301 rather than serving it.
+ */
+const PAGE = 'https://cloudsforge.online/journal'
 /** A development address. The registry resolves every surface to a localhost port from here. */
-const DEV = 'http://localhost:5196/'
+const DEV = 'http://localhost:5196/journal'
 
 /** Run `body` with a window at `url`, and take the window away again whatever happens. */
 function at<T>(url: string, body: () => T): T {
@@ -98,7 +114,19 @@ describe('the in-place network view', () => {
     // other test here because every other test is about a link to somewhere else.
     at(PAGE, () => {
       setViewedNetwork('testnet')
-      assert.equal(viewedSurfaceUrl('journal'), 'https://journal-testnet.cloudsforge.online')
+      // ══════════════════════════════════════════════════════════════════════════════════════════
+      // AND THE TWIN IS `testnet.<apex>/journal`, WHICH IS NOT THE SHAPE THIS ASSERTION USED TO
+      // NAME.
+      //
+      // It read `journal-testnet.cloudsforge.online` while the surface was a hostname, and both
+      // halves of the address changed at once. `envLabel('', 'testnet')` has nothing to suffix, so
+      // the environment label stands alone as the first label — that is the same rule that puts the
+      // marketing site's testnet twin at `testnet.<apex>` — and the mount then comes off the
+      // registry row as a path. Writing either half without the other produces an address that
+      // exists: `testnet.cloudsforge.online` alone is micro-site's testnet front page, which
+      // answers 200 with somebody else's HTML and is the failure a reachability check cannot see.
+      // ══════════════════════════════════════════════════════════════════════════════════════════
+      assert.equal(viewedSurfaceUrl('journal'), 'https://testnet.cloudsforge.online/journal')
       assert.ok(!viewedSurfaceUrl('journal').includes('network'))
     })
   })
@@ -116,10 +144,18 @@ describe('the in-place network view', () => {
     // Nothing in `src/` names a CloudsForge hostname — one image is served from localhost, from a
     // preview and from two production estates. Every link is therefore composed, and this is the
     // assertion that it is composed rather than merely correct on the estate it was written on.
-    at('https://journal.example.test/', () => {
+    //
+    // The address is the apex plus the mount, for the reason `PAGE` above is: this surface no
+    // longer contributes a first label for the apex derivation to strip, so a page served at
+    // `journal.example.test` is a page on an apex CALLED `journal.example.test` — which is the
+    // correct answer for an unknown three-label name and the wrong one to be asserting here.
+    at('https://example.test/journal/a/some-article', () => {
       assert.equal(viewedHosts().faucet, 'https://network.example.test/faucet')
       setViewedNetwork('testnet')
       assert.equal(viewedHosts().faucet, 'https://network-testnet.example.test/faucet')
+      // And this surface's own address on the other estate keeps the mount and drops the article:
+      // `viewedSurfaceUrl` composes where a SURFACE lives, not where the reader currently is.
+      assert.equal(viewedSurfaceUrl('journal'), 'https://testnet.example.test/journal')
     })
   })
 

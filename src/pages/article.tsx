@@ -29,7 +29,7 @@ import { tagBySlug } from '../content/tags.ts'
 import { stripInline } from '../lib/inline.tsx'
 import { articleHead } from '../lib/meta.ts'
 import { formatDate, readingMinutes, wordCount } from '../lib/reading.ts'
-import { articlePath, topicPath } from '../lib/routes.ts'
+import { articlePath, publicPath, topicPath } from '../lib/routes.ts'
 import { hasToc, tableOfContents } from '../lib/toc.ts'
 import { NotFoundPage } from './not-found.tsx'
 import type { Article } from '../content/types.ts'
@@ -98,11 +98,16 @@ export function ArticleView({ article }: { article: Article }) {
           contentful paint on this page, and `loading="lazy"` on an image that is already in the
           viewport delays it for no benefit — the browser has to run layout before it can tell the
           image is visible. `fetchPriority="high"` says the same thing to the network stack.
+
+          `publicPath()` on the src, as on every other image in this bundle: an `<img>` resolves
+          against the ORIGIN and this bundle is mounted at `/journal`. This is the one where getting
+          it wrong is most expensive — the hero is the largest paint AND the picture in the link
+          preview a reader was sold the article by.
         */}
         <figure className="jn-article__hero">
           <img
             className="jn-article__hero-img"
-            src={article.hero.src}
+            src={publicPath(article.hero.src)}
             alt={article.hero.alt}
             width={1600}
             height={900}

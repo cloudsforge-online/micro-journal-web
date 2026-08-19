@@ -36,7 +36,7 @@ import { ARTICLES, articlesByTag } from '../src/content/index.ts'
 import { TAGS } from '../src/content/tags.ts'
 import { pageEntries } from '../src/lib/heads.ts'
 import { HEAD_END, HEAD_START, ORIGIN_PLACEHOLDER, renderHead } from '../src/lib/meta.ts'
-import { ARTICLE_PREFIX, ROUTES } from '../src/lib/routes.ts'
+import { ARTICLE_PREFIX, BASE, ROUTES, publicPath } from '../src/lib/routes.ts'
 import { ROOT } from './sources.ts'
 
 const DIST = join(ROOT, 'dist')
@@ -162,9 +162,57 @@ test('THE FILES EXIST WHERE nginx WILL LOOK FOR THEM', (t) => {
     'dist contains a page nothing claims, or is missing one — a renamed slug leaves the old ' +
       'directory behind and it ships in the image forever with nothing pointing at it',
   )
-  for (const file of ['feed.xml', 'sitemap.xml', 'robots.txt']) {
+  for (const file of ['feed.xml', 'sitemap.xml']) {
     assert.ok(existsSync(join(DIST, file)), `${file} was not written`)
   }
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // AND robots.txt IS NOT WRITTEN, WHICH IS THE ONE ABSENCE IN THIS DIRECTORY THAT IS A DECISION.
+  //
+  // A crawler reads that file at the ORIGIN ROOT and nowhere else, and this bundle is served from
+  // `/journal`. Anything written here would land at `/journal/robots.txt` — a document nothing will
+  // ever request — while the rule it carries (`Disallow: /search`) stopped being enforced anywhere.
+  // Both of its lines are in micro-site's apex robots.txt now, which is the file that governs this
+  // path. Asserted rather than left to `writtenPages()` above, which only walks `.html`.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  assert.ok(
+    !existsSync(join(DIST, 'robots.txt')),
+    'the build wrote a robots.txt; under a mount it is a file no crawler opens, and the rules it ' +
+      'would carry belong to the apex — see src/lib/syndication.ts',
+  )
+})
+
+test('THE IMAGE PUTS dist WHERE THE URL SPACE SAYS IT IS', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // THE ONE JOIN NOTHING ELSE IN THIS REPOSITORY CAN SEE, AND IT IS THREE FILES WIDE.
+  //
+  // `vite.config.ts` bakes `/journal/` into every asset href. `nginx.conf` serves `root` + the URI
+  // whole, with no rewriting. The Dockerfile decides which directory `root` + `/journal/…` lands in.
+  // Get the third one wrong — copy `dist` to `html/` instead of `html/journal/` — and every one of
+  // the other two is still internally consistent, every test in this directory still passes, and the
+  // container answers 404 for the entire publication.
+  //
+  // The prefix is NOT stripped on the way in: the gateway matches `PathPrefix('/journal')` and
+  // passes the URI through, which is what makes the address the same string in vite's `base`, in the
+  // router's `basename`, in each `location`, on disk, and in a reader's bar. A `StripPrefix`
+  // middleware was the alternative and this line is the reason it was rejected.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const dockerfile = readFileSync(join(ROOT, 'Dockerfile'), 'utf8')
+  const destination = /COPY --from=build \/app\/dist (\S+)/.exec(dockerfile)?.[1]
+  assert.ok(destination, 'the Dockerfile no longer copies the build into the runtime image')
+  assert.equal(
+    destination,
+    `/usr/share/nginx/html${BASE}`,
+    `the image copies dist to ${destination}, but nginx serves root + the URI whole and every URI ` +
+      `begins ${BASE} — so the whole publication would 404 with a clean build log`,
+  )
+
+  // And nginx's `root` is the directory that destination sits inside, which is the other half of the
+  // same arithmetic. Read as text because nothing here can start nginx.
+  assert.match(
+    readFileSync(join(ROOT, 'nginx.conf'), 'utf8'),
+    /^\s*root \/usr\/share\/nginx\/html;/m,
+  )
 })
 
 test('EACH FILE CARRIES ITS OWN HEAD, SPLICED FROM ITS OWN ENTRY', (t) => {
@@ -204,14 +252,35 @@ test('THE ARTICLES ARE IN THE MARKUP, WHICH IS THE ONLY REASON ANY OF THIS EXIST
     // The reader-facing furniture that only the static render produces. A crawler and a
     // link-preview fetcher both stop at this markup, so anything not in it does not exist to them.
     assert.ok(html.includes(article.title.replace(/&/g, '&amp;')), `${article.slug} has no headline`)
-    assert.ok(html.includes(`/articles/${article.slug}/hero.png`), `${article.slug} has no hero`)
+    // MOUNTED, and this is the assertion that catches the half of the move that a browser hides.
+    // `article.hero.src` is written mount-relative in `content/`; rendered as-is it names
+    // `<apex>/articles/…`, which belongs to the marketing site and 404s. A reader on the live page
+    // sees a broken image — visible, at least — but the same string goes into `og:image` and into
+    // the feed's `content:encoded`, where the only witness is a machine that never reports back.
+    assert.ok(
+      html.includes(publicPath(`/articles/${article.slug}/hero.png`)),
+      `${article.slug} has no hero at ${publicPath(`/articles/${article.slug}/hero.png`)}`,
+    )
+    assert.doesNotMatch(
+      html,
+      new RegExp(`"/articles/${article.slug}/`),
+      `${article.slug} links its own artwork without ${BASE}, which is the marketing site's 404`,
+    )
   }
 
   // And the archive lists them all, so the one page a crawler is given as an entry point leads to
   // every other one without JavaScript.
+  //
+  // WITH THE MOUNT ON EACH, which is what proves `<BrowserRouter basename>` reached the prerender:
+  // `StaticRouter` takes its own `basename` and a `<Link>` composes the href from it, so an
+  // unmounted href here means the static render and the live router disagree about where this
+  // publication is — and only the static one is what a crawler follows.
   const home = distFile('index.html')
   for (const article of ARTICLES) {
-    assert.ok(home.includes(`/a/${article.slug}`), `the archive does not link ${article.slug}`)
+    assert.ok(
+      home.includes(`href="${publicPath(`/a/${article.slug}`)}"`),
+      `the archive does not link ${article.slug} at its public address`,
+    )
   }
 })
 
@@ -220,7 +289,7 @@ test('NOTHING WRITTEN TO DISK NAMES A HOST', (t) => {
   // The placeholder is the only correct form at build time, and this is where "correct in every
   // environment" stops being an argument and becomes a measurement. A single baked hostname in a
   // canonical tag de-indexes an entire archive in favour of an origin its readers were never on.
-  for (const file of [...writtenPages(), 'feed.xml', 'sitemap.xml', 'robots.txt']) {
+  for (const file of [...writtenPages(), 'feed.xml', 'sitemap.xml']) {
     const contents = distFile(file)
     assert.doesNotMatch(contents, /cloudsforge\.online/, `${file} names a hostname`)
     assert.doesNotMatch(contents, /https?:\/\/localhost/, `${file} names localhost`)

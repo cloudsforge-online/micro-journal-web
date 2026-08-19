@@ -17,6 +17,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { ScrollToTop } from './components/scroll-to-top.tsx'
 import { AppShell } from './components/shell.tsx'
 import { AuthProvider } from './lib/auth.tsx'
+import { BASE } from './lib/routes.ts'
 import { routeChildren } from './routes-tree.tsx'
 
 export function AppRoutes() {
@@ -27,9 +28,21 @@ export function AppRoutes() {
   )
 }
 
+/**
+ * ── `basename`, WHICH IS WHAT MAKES THIS SURFACE A FOLDER RATHER THAN A HOST ─────────────────────
+ *
+ * Every path in `src/lib/routes.ts` is relative to the mount, so `<Route path="topics">` and
+ * `<Link to="/about">` are written exactly as they were when this was a hostname of its own. This
+ * one property is what puts `/journal` in front of them: matching strips it before the router sees
+ * the location, and `<Link>` puts it back when it renders an `href`.
+ *
+ * It is the SAME constant `scripts/prerender.ts` gives `StaticRouter`, and the two must agree or
+ * the markup on disk links somewhere the running bundle does not — an anchor a crawler follows to
+ * the marketing site's 404 while a reader clicking the same word in a browser goes to the article.
+ */
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={BASE}>
       <ScrollToTop />
       <AuthProvider>
         <AppRoutes />
