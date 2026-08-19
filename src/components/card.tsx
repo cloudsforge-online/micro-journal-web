@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom'
 import type { Article } from '../content/types.ts'
 import { formatDate, readingMinutes } from '../lib/reading.ts'
 import { stripInline } from '../lib/inline.tsx'
-import { articlePath, topicPath } from '../lib/routes.ts'
+import { articlePath, publicPath, topicPath } from '../lib/routes.ts'
 import { tagBySlug } from '../content/tags.ts'
 
 export function ArticleCard({
@@ -29,9 +29,17 @@ export function ArticleCard({
   return (
     <article className={`jn-card${lead ? ' jn-card--lead' : ''}`}>
       <Link className="jn-card__thumb" to={articlePath(article.slug)} tabIndex={-1} aria-hidden="true">
+        {/*
+          `publicPath()` and not the bare `article.hero.src`, and the asymmetry with the `to` above
+          is the point: `<Link>` re-applies the router's basename on its own, and an `<img>` is a
+          plain browser URL that resolves against the ORIGIN. Without it the picture is requested
+          from `/articles/<slug>/hero.png` at the apex, which belongs to the marketing site and
+          answers 404 — every card on the archive page a broken image, in production only, because
+          `pnpm dev` serves the same tree from the same base.
+        */}
         <img
           className="jn-card__img"
-          src={article.hero.src}
+          src={publicPath(article.hero.src)}
           alt=""
           width={1600}
           height={900}

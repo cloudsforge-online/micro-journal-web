@@ -31,11 +31,21 @@
  *
  * ── THE PARSER IS ONE PASS AND IT DOES NOT NEST ──────────────────────────────────────────────────
  *
- * `**bold with *italic* inside**` renders as bold text containing literal asterisks. That is a real
- * limitation and it is chosen: a nesting parser is where the bugs are, the archive has never wanted
- * it, and prose that needs two levels of emphasis usually wants rewriting instead.
+ * A nesting parser is where the bugs are, the archive has never wanted one, and prose that needs two
+ * levels of emphasis usually wants rewriting instead. So `**bold with *italic* inside**` does not
+ * come out as either of the things an author might hope for. `\*\*[^*]+\*\*` cannot match a run with
+ * a `*` in it, so the bold alternative never fires; what the pass finds is `*bold with *` and
+ * `* inside*` — two italic runs with the emphasised word left plain between them and a stray
+ * asterisk at each end.
+ *
+ * That is worth stating exactly, because this comment previously said it "renders as bold text
+ * containing literal asterisks", which is the tidy answer and was never the output. `test/inline.
+ * test.ts` pins the real one. Both limitations in this module — this and the closing paren a href
+ * cannot contain — are tolerable for the same reason: they fail LOUDLY, in a draft, in front of the
+ * person writing it, rather than quietly on a published page.
  */
 import { Fragment, type ReactNode } from 'react'
+import { publicPath } from './routes.ts'
 
 /**
  * The one place a href is judged.
@@ -48,6 +58,31 @@ export function isAllowedHref(href: string): boolean {
   // A single leading slash. `//evil.example` is a protocol-relative URL and is NOT a path.
   if (href.startsWith('/') && !href.startsWith('//')) return true
   return href.startsWith('https://')
+}
+
+/**
+ * A href as authored, as the address that actually resolves.
+ *
+ * ── AN AUTHOR WRITES `[…](/a/some-other-piece)` AND MEANS "THE ARTICLE OF THAT NAME" ─────────────
+ *
+ * Which was the same string as the URL for as long as this publication was a hostname, and is not
+ * one any more: the bundle is mounted at `/journal`, so a leading slash in a content file resolves
+ * against the APEX and lands on the marketing site's 404. That is a link inside the prose of a
+ * published article, which is the one kind of link an author cannot be asked to keep in step with
+ * where the estate happens to be serving this surface from this year.
+ *
+ * So the authoring convention stays exactly as it was — a leading slash means "somewhere in this
+ * publication" — and the mount is applied here, once, on the way out of the tokeniser. Both
+ * renderers get it: the React one in this file, and the string one in `syndication.ts` that writes
+ * the feed's `content:encoded`.
+ *
+ * The other two shapes are left alone and each for its own reason: an `https://` URL is somebody
+ * else's site and prefixing it would be nonsense, and a `#fragment` resolves against whatever page
+ * the reader is already on, which is already the right one.
+ */
+export function linkHref(href: string): string {
+  if (href.startsWith('/') && !href.startsWith('//')) return publicPath(href)
+  return href
 }
 
 /** Whether a link leaves this surface, and therefore needs `rel` and a new tab. */
@@ -78,6 +113,11 @@ const INLINE = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g
  * A rejected href collapses to a `text` token carrying the LABEL, not the whole `[text](href)`
  * source: the reader gets the sentence they were meant to read, minus a link that was never going
  * to be followed. Both renderers therefore get the same fallback without either implementing it.
+ *
+ * A `link` token's `href` is the PUBLIC address, not the authored one — `linkHref()` above is
+ * applied here so that neither renderer has to remember, and so that the two cannot disagree about
+ * where an in-article link points. `isExternal()` still answers correctly on the result, because
+ * the mount is only ever applied to a path.
  */
 export function tokenizeInline(text: string): readonly InlineToken[] {
   return text.split(INLINE).map((part): InlineToken => {
@@ -94,7 +134,7 @@ export function tokenizeInline(text: string): readonly InlineToken[] {
     if (link) {
       const [, label, href] = link as unknown as [string, string, string]
       if (!isAllowedHref(href)) return { kind: 'text', text: label }
-      return { kind: 'link', text: label, href }
+      return { kind: 'link', text: label, href: linkHref(href) }
     }
     return { kind: 'text', text: part }
   })

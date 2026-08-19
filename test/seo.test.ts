@@ -37,7 +37,8 @@ import { TAGS } from '../src/content/tags.ts'
 import { SURFACE_DESCRIPTION } from '../src/lib/hosts.ts'
 import { pageEntries } from '../src/lib/heads.ts'
 import { HEAD_END, HEAD_START, ORIGIN_PLACEHOLDER, renderHead } from '../src/lib/meta.ts'
-import { journalSitemap, robotsTxt, sitemapXml } from '../src/lib/syndication.ts'
+import { BASE, FEED_PATH, publicPath } from '../src/lib/routes.ts'
+import { journalSitemap, sitemapXml } from '../src/lib/syndication.ts'
 import { read, stripComments } from './sources.ts'
 
 /** RAW, not stripped: the two markers this file's first test looks between ARE HTML comments. */
@@ -51,10 +52,15 @@ const NGINX = stripComments(read('nginx.conf'), 'nginx')
  * Brace-counted rather than sliced to the next `}`, which is the version that silently returns four
  * lines: `types { }` closes before the location does, and every check below it then passes over a
  * fragment. That failure is invisible — the assertions still run, against nothing.
+ *
+ * THE ARGUMENT IS MOUNT-RELATIVE AND THE MOUNT IS APPLIED HERE, so a caller writes `/feed.xml` — the
+ * name of the file as this repository thinks of it — and cannot accidentally look up a location that
+ * does not exist. `assert.notEqual(start, -1)` is what makes that safe rather than merely tidy: a
+ * path this file gets wrong fails loudly here instead of returning a block from somewhere else.
  */
 function locationBlock(path: string): string {
-  const start = NGINX.indexOf(`location = ${path} {`)
-  assert.notEqual(start, -1, `nginx.conf has no location for ${path}`)
+  const start = NGINX.indexOf(`location = ${publicPath(path)} {`)
+  assert.notEqual(start, -1, `nginx.conf has no location for ${publicPath(path)}`)
   let depth = 0
   for (let i = start; i < NGINX.length; i += 1) {
     if (NGINX[i] === '{') depth += 1
@@ -160,17 +166,30 @@ test('EVERY PAGE CARRIES ITS OWN TITLE, ITS OWN SENTENCE AND ITS OWN PICTURE', (
   // Every article's card is its own file. The default share card is the FALLBACK for the pages that
   // have no artwork — the archive, topics, about, search — and an article falling back to it is the
   // exact symptom above, one step short of it.
+  //
+  // ── AND THE CARD IS MOUNTED, WHICH IS THE HALF THAT BROKE SILENTLY WHEN THIS BECAME A FOLDER ────
+  //
+  // `article.card` is written mount-relative in `content/`, because that is the address the page
+  // itself uses. `og:image` is resolved by a machine in somebody else's chat window against the
+  // ORIGIN, so an unmounted one names `<apex>/articles/<slug>/card.png` — an address that belongs to
+  // the marketing site and answers 404. The link still unfurls, with no picture, which is not a
+  // failure anybody reports.
   for (const article of ARTICLES) {
     const page = entries.find((entry) => entry.path === `/a/${article.slug}`)
     assert.ok(page, `${article.slug} has no page entry`)
-    assert.equal(page.head.meta.image, article.card)
+    assert.equal(page.head.meta.image, publicPath(article.card))
     assert.match(article.card, new RegExp(`^/articles/${article.slug}/card\\.png$`))
     assert.equal(page.head.kind, 'article', 'an article is not og:type article')
   }
   for (const path of ['/', '/topics', '/about', '/search', '/404']) {
     const page = entries.find((entry) => entry.path === path)
     assert.ok(page, `${path} has no page entry`)
-    assert.equal(page.head.meta.image, '/og-1200x630.png')
+    // `surfaceMeta()` upstream defaults a missing image to `DEFAULT_OG_IMAGE`, which is
+    // `/og-1200x630.png` — the apex's own card, at the apex's own address. `journalMeta()` in
+    // `src/lib/meta.ts` passes the default in explicitly so the mount is applied to it, and this is
+    // the assertion that says so: without that line five of this publication's pages would unfurl
+    // with the marketing site's picture on them, and every one of them would still render perfectly.
+    assert.equal(page.head.meta.image, `${BASE}/og-1200x630.png`)
     assert.equal(page.head.kind, 'website', `${path} claims to be an article`)
   }
 })
@@ -193,9 +212,23 @@ test('THE ABSOLUTE URLs ARE A PLACEHOLDER, IN EVERY TAG THAT NEEDS ONE', () => {
     assert.doesNotMatch(rendered, /localhost/, `${page.path} names localhost`)
     for (const attribute of ['og:url', 'og:image', 'twitter:image']) {
       const value = new RegExp(`"${attribute}" content="([^"]*)"`).exec(rendered)?.[1]
-      assert.ok(value?.startsWith(ORIGIN_PLACEHOLDER), `${page.path} has a relative ${attribute}`)
+      // Presence first, and as its own assertion: `assert.ok(value?.startsWith(…))` narrows the
+      // EXPRESSION rather than `value`, so the mount check below would not compile — and a missing
+      // tag would report itself as "relative", which is a different defect than the one it is.
+      assert.ok(value !== undefined, `${page.path} has no ${attribute} at all`)
+      assert.ok(value.startsWith(ORIGIN_PLACEHOLDER), `${page.path} has a relative ${attribute}`)
+      // AND THE MOUNT IS BETWEEN THE ORIGIN AND THE PATH. `origin + routerPath` is a URL that
+      // resolves — to the marketing site — so this is the failure that produces a valid-looking
+      // absolute address pointing at the wrong surface. Checked on every tag rather than on the
+      // canonical alone, because `og:image` and `twitter:image` are read by a machine that will
+      // never render the page and never report what it got.
+      assert.ok(
+        value.startsWith(`${ORIGIN_PLACEHOLDER}${BASE}/`) ||
+          value === `${ORIGIN_PLACEHOLDER}${BASE}`,
+        `${page.path} composes ${attribute} as ${value}, which is outside ${BASE}`,
+      )
     }
-    assert.match(rendered, /<link rel="canonical" href="__CF_ORIGIN__\//)
+    assert.match(rendered, new RegExp(`<link rel="canonical" href="__CF_ORIGIN__${BASE}`))
   }
 })
 
@@ -265,28 +298,42 @@ test('the environment map catches BOTH hostname shapes', () => {
   assert.match(NGINX, /\(\?:\[\^\.\]\+-\)\?/)
 })
 
-test('a non-mainnet hostname has no sitemap, no feed, and refuses every crawler', () => {
+test('a non-mainnet hostname has no sitemap and no feed', () => {
   assert.match(locationBlock('/feed.xml'), /if \(\$cf_env\) \{ return 404; \}/)
   assert.match(locationBlock('/sitemap.xml'), /if \(\$cf_env\) \{ return 404; \}/)
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
-  // WRITTEN ACROSS REAL LINES, AND THIS ASSERTION IS THE ONE THAT LOOKS LIKE A TYPO.
+  // THE THIRD GATE WAS A `location = /robots.txt` AND IT DID NOT WEAKEN — IT MOVED.
+  //
+  // A crawler reads robots.txt at the ORIGIN ROOT and nowhere else, so a publication served from a
+  // FOLDER has no robots file of its own to serve: `/journal/robots.txt` is a document nothing will
+  // ever request. Prefixing that block like every other one in nginx.conf would therefore have put
+  // the only copy of the `Disallow: /search` rule into a file no machine opens, while
+  // `/journal/search?q=…` became crawlable for the first time — forty pieces of writing indexed as
+  // four thousand near-empty result pages, all of them competing with the articles.
+  //
+  // Both lines are in micro-site's apex robots.txt now, and the `$cf_env` gate is STRICTLY BETTER
+  // there: the apex already answers `Disallow: /` whole on every non-mainnet hostname, so the
+  // testnet archive is refused by the host that serves it rather than by a rule this repository has
+  // to remember to keep. What is asserted here is only that it did not come back.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  assert.doesNotMatch(NGINX, /robots\.txt/, 'nginx.conf serves a robots.txt again — see above')
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // AND THE BACKSLASH RULE OUTLIVED THE BLOCK THAT PROMPTED IT, WHICH IS WHY IT IS STILL HERE.
   //
   // nginx does not process backslash escapes inside a quoted string; it emits the two characters.
-  // `'User-agent: *\nDisallow: /\n'` therefore produces a ONE-LINE file reading
-  // `User-agent: *\nDisallow: /\n` literally, in which a strict parser sees one unknown directive
-  // and no `Disallow` at all — so the hostname that was supposed to refuse every crawler invites
-  // them. exchange-web shipped exactly that, harmlessly, because its `Disallow: /` is on the same
-  // line as the junk. Copying it here is the obvious tidy-up, so the shape is pinned in both
-  // directions.
+  // `'User-agent: *\nDisallow: /\n'` produces a ONE-LINE file reading that text literally, in which
+  // a strict parser sees one unknown directive and no `Disallow` at all — so the hostname that was
+  // supposed to refuse every crawler invites them. exchange-web shipped exactly that, harmlessly,
+  // because its `Disallow: /` is on the same line as the junk; MICRO-SITE'S APEX robots.txt HAS THE
+  // SAME DEFECT TODAY and this move is what makes it matter, because that file is now the one
+  // governing this path. Fixed there in the same wave.
+  //
+  // Across the WHOLE file, not one block. `location = /healthz` had this defect too — a probe
+  // answering `ok\n` with a literal backslash in it — ten lines under the comment explaining why
+  // not to, which is how a rule that lives only in prose gets broken by the person who wrote it.
   // ══════════════════════════════════════════════════════════════════════════════════════════════
-  assert.match(
-    locationBlock('/robots.txt'),
-    /if \(\$cf_env\) \{ return 200 'User-agent: \*\nDisallow: \/\n'; \}/,
-  )
-  // Across the WHOLE file, not just this block. `location = /healthz` had the same defect — a probe
-  // answered `ok\n` with a literal backslash in it — ten lines under the comment explaining why not
-  // to, which is how a rule that lives only in prose gets broken by the person who wrote it.
   assert.doesNotMatch(
     NGINX,
     /return\s+\d+\s+['"][^'"]*\\n/,
@@ -294,7 +341,7 @@ test('a non-mainnet hostname has no sitemap, no feed, and refuses every crawler'
   )
 })
 
-test('THE SITEMAP AND robots.txt ARE FILES THE BUILD WROTE, NOT STRINGS NGINX COMPOSES', () => {
+test('THE SITEMAP IS A FILE THE BUILD WROTE, NOT A STRING NGINX COMPOSES', () => {
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   // The inversion of what every other surface in the estate does, and the reason is the corpus.
   //
@@ -307,7 +354,7 @@ test('THE SITEMAP AND robots.txt ARE FILES THE BUILD WROTE, NOT STRINGS NGINX CO
   // So `scripts/prerender.ts` writes both, from the content, and they get `$host` from the same
   // `sub_filter` as everything else.
   // ══════════════════════════════════════════════════════════════════════════════════════════════
-  const sitemap = NGINX.slice(NGINX.indexOf('location = /sitemap.xml'), NGINX.indexOf('location = /robots.txt'))
+  const sitemap = locationBlock('/sitemap.xml')
   assert.doesNotMatch(sitemap, /<loc>/, 'the sitemap is composed in nginx again')
   assert.doesNotMatch(sitemap, /return 200/)
   assert.doesNotMatch(NGINX, /cloudsforge\.online/)
@@ -315,6 +362,20 @@ test('THE SITEMAP AND robots.txt ARE FILES THE BUILD WROTE, NOT STRINGS NGINX CO
   const xml = sitemapXml(journalSitemap(ARTICLES, TAGS, '2026-08-17'), ORIGIN_PLACEHOLDER)
   const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1] ?? '')
   for (const loc of locs) assert.ok(loc.startsWith(`${ORIGIN_PLACEHOLDER}/`), `${loc} is relative`)
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // EVERY `<loc>` SITS UNDER THE MOUNT, AND ON A SITEMAP THAT IS A RULE RATHER THAN A CONVENTION.
+  //
+  // A sitemap outside the origin root is legal on exactly one condition: every URL it declares is at
+  // or below the path it is served from. `/journal/sitemap.xml` declaring `<apex>/a/<slug>` is not a
+  // sitemap with a few broken links in it — it is a CROSS-PATH SUBMISSION, which a crawler discards
+  // wholesale, taking the valid entries beside it. The archive would then have no mechanical way of
+  // announcing itself at all, and the symptom is silence.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  for (const loc of locs) {
+    const path = loc.slice(ORIGIN_PLACEHOLDER.length)
+    assert.ok(path === BASE || path.startsWith(`${BASE}/`), `${loc} is outside ${BASE}`)
+  }
 
   const paths = locs.map((loc) => loc.slice(ORIGIN_PLACEHOLDER.length))
   const populated = TAGS.filter((tag) => articlesByTag(tag.slug).length > 0)
@@ -326,32 +387,35 @@ test('THE SITEMAP AND robots.txt ARE FILES THE BUILD WROTE, NOT STRINGS NGINX CO
       '/about',
       ...populated.map((tag) => `/topics/${tag.slug}`),
       ...ARTICLES.map((article) => `/a/${article.slug}`),
-    ].sort(),
+    ]
+      .map(publicPath)
+      .sort(),
   )
 
   // A sitemap is an INVITATION, so the two `noindex` pages are not in it. Inviting a crawler to a
   // page that then tells it to leave is the sort of contradiction that gets a whole sitemap
   // discounted, and it costs an archive its only mechanical way of announcing itself.
-  assert.ok(!paths.includes('/search') && !paths.includes('/404'))
+  assert.ok(!paths.includes(publicPath('/search')) && !paths.includes(publicPath('/404')))
   // Every entry carries a real day rather than the moment of the build. `<lastmod>` moving on every
   // deploy of every article at once is how a crawler learns to stop believing it.
   assert.equal([...xml.matchAll(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)].length, locs.length)
-
-  const txt = robotsTxt(ORIGIN_PLACEHOLDER)
-  assert.match(txt, /^User-agent: \*\nAllow: \/\nDisallow: \/search\n/)
-  assert.match(txt, /\nSitemap: __CF_ORIGIN__\/sitemap\.xml\n/)
 })
 
-test('THE THREE MACHINE-READABLE FILES ARE INSIDE sub_filter_types', () => {
+test('THE TWO MACHINE-READABLE FILES ARE INSIDE sub_filter_types', () => {
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   // The one-line omission that would ship every absolute URL in this repository as the literal
   // string `__CF_ORIGIN__`.
   //
-  // `sub_filter_types` defaults to `text/html` ALONE. The feed, the sitemap and robots.txt are the
-  // three responses whose entire content is absolute URLs, and each declares its own `default_type`
-  // precisely so nginx does not guess — which also takes all three out of the default. A feed whose
-  // every `<link>` reads `__CF_ORIGIN__/a/…` is not a feed with a cosmetic problem; it is a
-  // subscription in which no article can be opened.
+  // `sub_filter_types` defaults to `text/html` ALONE. The feed and the sitemap are the responses
+  // whose entire content is absolute URLs, and each declares its own `default_type` precisely so
+  // nginx does not guess — which also takes both out of the default. A feed whose every `<link>`
+  // reads `__CF_ORIGIN__/journal/a/…` is not a feed with a cosmetic problem; it is a subscription in
+  // which no article can be opened.
+  //
+  // TWO rather than three: robots.txt was the third and the move to a folder deleted it, since a
+  // crawler reads that file at the origin root and nowhere else. `text/plain` stays in the declared
+  // list for `location = /healthz` — filtering a two-byte body costs nothing, and a type quietly
+  // dropped from this line is invisible until somebody opens a feed.
   //
   // Derived from the file rather than listed here, so a location that changes its content type
   // fails this instead of quietly falling out of the filter.
@@ -360,7 +424,7 @@ test('THE THREE MACHINE-READABLE FILES ARE INSIDE sub_filter_types', () => {
   assert.ok(declared, 'nginx.conf no longer declares sub_filter_types')
   assert.ok(declared.includes('text/html'), 'text/html is implicit but is listed for the reader')
 
-  for (const location of ['/feed.xml', '/sitemap.xml', '/robots.txt']) {
+  for (const location of ['/feed.xml', '/sitemap.xml']) {
     const block = locationBlock(location)
     // `types { }` empties the mime table FOR THIS LOCATION so `default_type` is what applies.
     // Without it nginx maps the extension in the URI to its own table and the `default_type` line
@@ -393,8 +457,33 @@ test('this surface asks to be indexed', () => {
   // And the feed is declared where a reader's browser and their feed reader both look for it —
   // relative, because it resolves against whichever origin served the page. It is the only
   // subscription this publication offers; there is no mailing list to fall back on.
+  //
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // THE MOUNT IS TYPED OUT IN index.html, AND THAT IS NOT AN INCONSISTENCY WITH THE FAVICONS ABOVE.
+  //
+  // The four icon hrefs a few lines up are root-relative in source and the mount is applied by
+  // VITE, which rewrites asset references in `index.html` against `base`. It does that for `.png`
+  // and it does NOT do it for `.xml` — settled by building and reading `dist/index.html` rather than
+  // by reading vite's documentation, which does not say. So the feed link is the one href in this
+  // file that has to carry `/journal` itself, and the two shapes side by side are each correct.
+  //
+  // Asserted against `FEED_PATH` rather than a literal so the file and `src/lib/routes.ts` cannot
+  // drift, and the failure this catches is a subscribe button that 404s in a reader's feed app —
+  // where nobody who hits it has any way to tell us.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
   assert.match(
     HTML,
-    /<link rel="alternate" type="application\/rss\+xml" title="Forge Journal" href="\/feed\.xml" \/>/,
+    new RegExp(
+      `<link rel="alternate" type="application/rss\\+xml" title="Forge Journal" ` +
+        `href="${FEED_PATH}" />`,
+    ),
   )
+
+  // AND THE FOUR ICONS ARE ROOT-RELATIVE, which is the other half of the same fact: written mounted
+  // they would come out of the build as `/journal/journal/favicon-32x32.png`, because vite rewrites
+  // them and does not check whether somebody already did.
+  for (const size of ['32x32', '192x192', '512x512']) {
+    assert.match(HTML, new RegExp(`href="/favicon-${size}\\.png"`))
+    assert.doesNotMatch(HTML, new RegExp(`href="${BASE}/favicon-${size}\\.png"`))
+  }
 })

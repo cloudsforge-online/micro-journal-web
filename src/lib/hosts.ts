@@ -21,10 +21,16 @@ import { cloudsforgeHosts, type CloudsForgeHosts, type SurfaceKey } from '@cloud
 /**
  * The surface this application IS.
  *
- * `journal`, registered as a `surface` with `inSwitcher: false`, subdomain `journal`, accent
- * `#ae7b3d` and glyph `❧`. **`markId: null`**, which is a decision rather than a gap: micro-brand
- * has no `journal` set, nothing in this bundle renders a mark, and `test/brand-chrome.test.ts`
- * asserts there is none to render.
+ * `journal`, registered as a `surface` with `inSwitcher: false`, accent `#ae7b3d` and glyph `❧`.
+ * **`markId: null`**, which is a decision rather than a gap: micro-brand has no `journal` set,
+ * nothing in this bundle renders a mark, and `test/brand-chrome.test.ts` asserts there is none to
+ * render.
+ *
+ * `subdomain: ''` WITH `basePath: '/journal'`, which is the registry saying in one line that this
+ * publication is a FOLDER on the apex rather than a hostname — wave 1 of the consolidation argued
+ * in micro-deploy `docs/apex-consolidation.md`. Everything the estate composes about this surface
+ * follows from those two fields, and `src/lib/routes.ts` is where the consequence inside this
+ * repository is written down.
  *
  * NOT `inSwitcher`, and the reason is written out in `surfaces.ts`: the switcher is where a person
  * chooses a PRODUCT, and the accent guard holds products to a strict bijection with
@@ -98,7 +104,7 @@ export function isLocal(hostname: string): boolean {
 }
 
 /**
- * Whether this bundle is being served from an address the surface registry knows.
+ * Whether this bundle is being served from the address the surface registry places it at.
  *
  * `cloudsforgeHosts()` derives the apex by stripping a KNOWN first label. Served from an unknown
  * name — a preview deployment, somebody's tunnel — the whole name becomes the apex and every
@@ -111,19 +117,32 @@ export function isLocal(hostname: string): boolean {
  * unregistered placement is also the placement whose `__CF_ORIGIN__` substitution nginx never ran,
  * so it is the one where a canonical tag may still be carrying a literal placeholder — and the
  * person who needs to know that is whoever put the bundle there.
+ *
+ * ── IT COMPARES THE WHOLE BASE URL AND NOT THE ORIGIN, AND THE MOUNT IS WHY ──────────────────────
+ *
+ * This was `new URL(estate[PRODUCT]).origin === pageOrigin` for as long as the journal was a
+ * hostname, and that comparison stopped being able to fail the day it became a folder. The registry
+ * now places this surface at the APEX — `subdomain: ''`, `basePath: '/journal'` — so the origin it
+ * composes is whatever apex `cloudsforgeHosts()` just derived from the page's own hostname, and a
+ * preview deployment at `pr-42.example.dev` is its own apex. Origin against origin was therefore
+ * comparing a value with itself: every unregistered placement in existence answered "known", which
+ * is the shape of check that reads as a guard and is one only in the case it was written for.
+ *
+ * The PATH is what still carries the information. A correctly-placed bundle is served under
+ * `/journal` — it is what `vite.config.ts`'s `base` bakes into every asset href and what the
+ * Dockerfile copies the build into — so a page whose own address is not at or beneath
+ * `estate.journal` is a bundle whose assets cannot resolve, whatever its hostname. `=== base` OR
+ * `base + '/'`, rather than a bare `startsWith`, because `/journalism` is not inside `/journal`.
  */
 export function isRegisteredPlacement(
-  pageOrigin: string,
+  pageUrl: string,
   hostname: string,
   estate: CloudsForgeHosts,
 ): boolean {
   if (isLocal(hostname)) return true
-  if (!pageOrigin) return true
-  try {
-    return new URL(estate[PRODUCT]).origin === pageOrigin
-  } catch {
-    return false
-  }
+  if (!pageUrl) return true
+  const base = estate[PRODUCT]
+  return pageUrl === base || pageUrl.startsWith(`${base}/`)
 }
 
 /** Every CloudsForge base URL, for the current environment. */
@@ -136,8 +155,18 @@ export function pageOrigin(): string {
   return typeof window === 'undefined' ? 'http://localhost' : window.location.origin
 }
 
-/** Whether the current address is one the registry knows. Read by the shell. */
+/**
+ * Whether the current address is the one the registry places this surface at. Read by the shell.
+ *
+ * ORIGIN AND PATHNAME, because the registry's answer for this surface is a folder rather than a
+ * host — see `isRegisteredPlacement()` above. No search and no hash: neither is part of where a
+ * bundle is mounted, and a reader arriving on `/journal/search?q=…` is at the right address.
+ */
 export function placementIsKnown(): boolean {
   if (typeof window === 'undefined') return true
-  return isRegisteredPlacement(window.location.origin, window.location.hostname, cloudsforgeHosts())
+  return isRegisteredPlacement(
+    `${window.location.origin}${window.location.pathname}`,
+    window.location.hostname,
+    cloudsforgeHosts(),
+  )
 }

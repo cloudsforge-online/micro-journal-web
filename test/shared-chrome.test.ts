@@ -41,6 +41,7 @@ import { test } from 'node:test'
 import { FOOTER_LEGAL_LINKS } from '@cloudsforge/ui'
 import { FOOTER_GROUPS, surface } from '@cloudsforge/ui/surfaces'
 import { PRODUCT } from '../src/lib/hosts.ts'
+import { BASE } from '../src/lib/routes.ts'
 import { read, readSibling, stripComments } from './sources.ts'
 
 const SHELL = stripComments(read('src/components/shell.tsx'), 'ts')
@@ -199,7 +200,18 @@ test('THIS SURFACE IS OUT OF THE PRODUCT MENU ON PURPOSE, AND IS REACHABLE ANYWA
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   const here = surface(PRODUCT)
   assert.equal(here.key, 'journal')
-  assert.equal(here.subdomain, 'journal')
+
+  // ── AND THE ROW NO LONGER NAMES A HOST OF ITS OWN, WHICH IS THE WHOLE MIGRATION IN TWO FIELDS ──
+  //
+  // `subdomain: ''` resolves to the apex and `basePath` is where the gateway mounts this bundle on
+  // it, so `hosts().journal` is `https://cloudsforge.online/journal`. The pair is asserted together
+  // because either one alone is a live defect: an empty subdomain with no base path points every
+  // link on eleven other surfaces at micro-site's front page, and a base path under the old
+  // hostname produces `journal.cloudsforge.online/journal`, which nginx answers with a 404 this
+  // repository's own tests would never see.
+  assert.equal(here.subdomain, '')
+  assert.equal(here.basePath, BASE)
+
   assert.equal(here.inSwitcher, false, 'the journal is in the product switcher; see the accent guard')
   assert.equal(here.accent, '#ae7b3d')
   assert.equal(here.servesUi, true)

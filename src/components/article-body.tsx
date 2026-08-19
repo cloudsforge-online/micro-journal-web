@@ -20,6 +20,7 @@
  */
 import type { Block } from '../content/types.ts'
 import { renderInline } from '../lib/inline.tsx'
+import { publicPath } from '../lib/routes.ts'
 
 export function ArticleBody({ blocks }: { blocks: readonly Block[] }) {
   return (
@@ -89,10 +90,14 @@ function BlockView({ block }: { block: Block }) {
             came for and is almost always the largest paint, so deferring it costs the one metric
             that matters. Width and height are stated so the paragraph after it does not jump when
             the image arrives — the layout shift a reader experiences as losing their place.
+
+            `publicPath()` because this bundle is mounted at `/journal` and an `<img>` src resolves
+            against the ORIGIN, not against the router — see the same note in `components/card.tsx`.
+            `src/lib/syndication.ts` applies it to the same field for the feed's copy of the figure.
           */}
           <img
             className="jn-figure__img"
-            src={block.src}
+            src={publicPath(block.src)}
             alt={block.alt}
             width={1600}
             height={900}

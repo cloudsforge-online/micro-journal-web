@@ -22,6 +22,42 @@
  * site, and it is why `nginx.conf` serves `$uri/index.html` before it falls back to anything.
  */
 
+/**
+ * ── WHERE THIS BUNDLE IS MOUNTED, AND WHY THE TWO KINDS OF PATH BELOW ARE NOT THE SAME KIND ──────
+ *
+ * This publication used to be a hostname. It is now a FOLDER on the apex: `/journal`, wave 1 of the
+ * consolidation argued in micro-deploy `docs/apex-consolidation.md`. The registry row says the same
+ * thing in one line — `subdomain: ''`, `basePath: '/journal'` — and everything the estate composes
+ * about this surface comes from there.
+ *
+ * Inside this repository the move splits every address into two, and getting the pair the wrong way
+ * round is the failure mode of the whole change:
+ *
+ *   A ROUTER PATH is what `react-router` matches, and it is relative to the mount. `/a/<slug>`.
+ *     Every `<Link to>`, every `<Route path>`, `NAV`, `searchPath()`, `articlePath()`, `topicPath()`.
+ *     `basename` in `src/app.tsx` and in `scripts/prerender.ts` puts the prefix back on the way out,
+ *     so a router path that already carries it renders `/journal/journal/a/<slug>`.
+ *
+ *   A PUBLIC PATH is what a reader's address bar shows and what a crawler is handed. `/journal/a/…`.
+ *     Every canonical, `og:url`, JSON-LD `@id`, feed `<link>`, sitemap `<loc>`, plain `<a href>` and
+ *     every `location` in `nginx.conf`. A crawler resolves these against the ORIGIN, not against the
+ *     mount, so a router path published as a public one names an address on the marketing site.
+ *
+ * `publicPath()` is the one crossing, and it is the only place `BASE` is concatenated.
+ */
+export const BASE = '/journal'
+
+/**
+ * A router path as a public one.
+ *
+ * The index is `/journal` rather than `/journal/` — no trailing slash anywhere on this surface, so
+ * the canonical, the sitemap entry and the `location` in `nginx.conf` are one address rather than
+ * two with a redirect between them.
+ */
+export function publicPath(path: string): string {
+  return path === '/' ? BASE : `${BASE}${path}`
+}
+
 /** The prefix every article sits under. One letter, because it appears in every shared link. */
 export const ARTICLE_PREFIX = 'a'
 
@@ -89,5 +125,12 @@ export function searchPath(query: string): string {
   return `/search?${new URLSearchParams({ q: trimmed }).toString()}`
 }
 
-/** The feed. A constant, because it is quoted in three places and typed in none of them. */
-export const FEED_PATH = '/feed.xml'
+/**
+ * The feed. A constant, because it is quoted in three places and typed in none of them.
+ *
+ * PUBLIC, unlike everything above it. The three places are a `<link rel="alternate">` in
+ * `index.html` and two plain `<a href>`s — none of them a `<Link>`, because the feed is a FILE
+ * rather than a route: nothing in the router matches it, `basename` never sees it, and a reader who
+ * clicks it leaves this bundle for their own feed application. So it carries the mount itself.
+ */
+export const FEED_PATH = `${BASE}/feed.xml`

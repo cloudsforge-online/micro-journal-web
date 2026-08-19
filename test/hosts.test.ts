@@ -59,8 +59,28 @@ function atPage<T>(url: string, fn: () => T): T {
 
 test('THE REGISTRY SAYS THIS SURFACE SERVES A PAGE, WHICH IS WHAT MADE THIS REPOSITORY LEGAL', () => {
   const journal = surface(PRODUCT)
-  assert.equal(journal.subdomain, 'journal')
-  assert.equal(KNOWN_SUBS.has('journal'), true)
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // A FOLDER ON THE APEX, WHICH IS TWO FIELDS AND NOT ONE.
+  //
+  // `subdomain: ''` alone would place this bundle AT the apex, which belongs to micro-site;
+  // `basePath` alone cannot be set without a subdomain to hang it off. Together they are the
+  // registry's whole statement that the journal is `https://<apex>/journal` — wave 1 of the
+  // consolidation in micro-deploy `docs/apex-consolidation.md`.
+  //
+  // Both halves are asserted because either one on its own is a live defect rather than a partial
+  // migration: `subdomain: ''` with no `basePath` makes `hosts().journal` the marketing site, and
+  // every footer link in the estate that says "Forge Journal" then lands on the home page.
+  //
+  // `journal` is NOT in KNOWN_SUBS any more, and that is the half with a consequence outside this
+  // row. KNOWN_SUBS is what `cloudsforgeHosts()` strips to derive the apex, so a stale entry would
+  // make `journal.<apex>` — the hostname the gateway now redirects — resolve every sibling under
+  // the apex as though it were a live surface address, keeping the retired name working just well
+  // enough that nobody notices it is retired.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  assert.equal(journal.subdomain, '')
+  assert.equal(journal.basePath, '/journal')
+  assert.equal(KNOWN_SUBS.has('journal'), false)
 
   // `servesUi` is what puts the journal in the shared footer's columns at all, and it is a claim
   // about the world rather than about this repository: it says a hostname answers. It goes true in
@@ -73,8 +93,16 @@ test('THE REGISTRY SAYS THIS SURFACE SERVES A PAGE, WHICH IS WHAT MADE THIS REPO
   // to. The argument for omitting it was that an article is byte-identical on both networks, so
   // there is nothing for a network switch to switch. That confuses the DATA with the CONTROL: the
   // flag decides what the estate bar's Testnet button does, and unflagged it throws a reader
-  // halfway through an article out onto Forge Network. It is also the invariant
-  // `network-view.test.ts` holds — every row with `servesUi` and no `basePath` views in place.
+  // halfway through an article out onto Forge Network.
+  //
+  // IT SURVIVED THE MOVE TO A FOLDER, which is worth an assertion of its own because the obvious
+  // reading of the registry says it should not have. The invariant `network-view.test.ts` held was
+  // "every row with `servesUi` and no `basePath` views in place", and every `basePath` row it was
+  // written against — `wallet`, `signin`, `faucet` — is a ROUTE INSIDE another surface's bundle,
+  // which is why it has no network view of its own to switch. This one is not: it is a separate
+  // bundle the gateway mounts at a path, it shares a devPort with nothing, and it is served by its
+  // own container. So the predicate upstream became `servesOwnBundle()` rather than `!basePath`,
+  // and this row keeps the flag it earned.
   assert.equal(journal.viewsAnyNetwork, true)
 
   // NOT in the switcher, which is the opposite of the call the exchange made and is decided by a
@@ -203,31 +231,43 @@ test('the four development hostnames are the same four the design system treats 
   }
 })
 
-test('THE REGISTRY PLACES THIS SURFACE AT ITS OWN HOSTNAME, IN BOTH ENVIRONMENT SHAPES', () => {
+test('THE REGISTRY PLACES THIS SURFACE AT A FOLDER ON THE APEX, IN BOTH ENVIRONMENT SHAPES', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // THE ADDRESS, READ BACK OFF THE REGISTRY AND NOT WRITTEN DOWN TWICE.
+  //
+  // `hosts().journal` is what every sibling frontend in the estate links to, what the footer's
+  // Forge Journal entry resolves and what `isRegisteredPlacement()` compares against. It is the
+  // apex plus `/journal` now, on both networks, and the only thing that changes between them is
+  // the label in front of the apex.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
   assert.equal(
-    atPage('https://journal.cloudsforge.online/', () => hosts()[PRODUCT]),
-    'https://journal.cloudsforge.online',
+    atPage('https://cloudsforge.online/journal', () => hosts()[PRODUCT]),
+    'https://cloudsforge.online/journal',
   )
-  assert.equal(atPage('https://journal.cloudsforge.online/', placementIsKnown), true)
+  assert.equal(atPage('https://cloudsforge.online/journal', placementIsKnown), true)
+  // A reader deep inside the archive is still correctly placed. This is the assertion that would
+  // fail if the check ever went back to comparing whole paths rather than the mount.
+  assert.equal(atPage('https://cloudsforge.online/journal/a/some-article', placementIsKnown), true)
 
-  // The environment is a SUFFIX on the first label, never a second one. Cloudflare's Universal SSL
-  // wildcard matches exactly one label, so `journal.testnet.cloudsforge.online` fails the handshake
-  // at the edge before it reaches the estate — which is why the registry composes
-  // `journal-testnet`.
+  // THE TESTNET SHAPE IS THE APEX PREFIX NOW, and the suffix shape is what the move retired.
+  // `journal-testnet.<apex>` existed because Cloudflare's Universal SSL wildcard matches exactly
+  // ONE label, so a surface could not take a second one; an apex-mounted surface needs neither —
+  // `testnet.<apex>/journal` is one label and one path, and the certificate covers it.
   assert.equal(
-    atPage('https://journal-testnet.cloudsforge.online/', () => hosts()[PRODUCT]),
-    'https://journal-testnet.cloudsforge.online',
+    atPage('https://testnet.cloudsforge.online/journal', () => hosts()[PRODUCT]),
+    'https://testnet.cloudsforge.online/journal',
   )
-  assert.equal(atPage('https://journal-testnet.cloudsforge.online/', placementIsKnown), true)
+  assert.equal(atPage('https://testnet.cloudsforge.online/journal', placementIsKnown), true)
 
   // And a testnet page composes TESTNET siblings. The failure this rules out is the quiet one: a
-  // suffixed hostname resolving to the mainnet apex, where every link works and points at the other
+  // testnet hostname resolving to the mainnet apex, where every link works and points at the other
   // network. Here that lands on the footer and on every in-article link to a product — an essay
   // that tells a reader to go and try the faucet, linking them at the mainnet one.
-  assert.match(atPage('https://journal-testnet.cloudsforge.online/', () => hosts().site), /testnet/)
+  assert.match(atPage('https://testnet.cloudsforge.online/journal', () => hosts().site), /testnet/)
 
-  // A local checkout is always placed — the registry resolves every surface to a localhost port.
-  assert.equal(atPage('http://localhost:5196/', placementIsKnown), true)
+  // A local checkout is always placed — the registry resolves every surface to a localhost port,
+  // and `vite.config.ts`'s `base` puts the bundle under `/journal` there too.
+  assert.equal(atPage('http://localhost:5196/journal', placementIsKnown), true)
 })
 
 test('AN ADDRESS THE REGISTRY CANNOT PLACE SAYS SO INSTEAD OF GUESSING', () => {
@@ -241,10 +281,32 @@ test('AN ADDRESS THE REGISTRY CANNOT PLACE SAYS SO INSTEAD OF GUESSING', () => {
   // substitution is a rule in this repository's own nginx.conf and a bundle served from somewhere
   // else is served by something else. So it is the one placement where a canonical tag may still
   // carry a literal placeholder — and the person who needs to know is whoever put the bundle there.
+  //
+  // ── AND THE MOVE TO A FOLDER IS WHY THE CHECK READS THE PATH ──────────────────────────────────
+  //
+  // The first case below is the one that stopped working silently. `some-preview.example.net` is
+  // its own apex — there is no known label to strip — so `hosts().journal` composes
+  // `https://some-preview.example.net/journal`, whose ORIGIN is the page's own. An origin-against-
+  // origin check therefore answered "known" for every unregistered host in existence, which is the
+  // worst kind of regression: a guard that still runs, still passes, and can no longer fail.
+  //
+  // The path is what carries the fact now. This bundle's assets are baked at `/journal/assets/…`,
+  // so a copy served at the root of a preview host is broken whatever its hostname, and that is
+  // exactly what the first assertion catches.
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   assert.equal(atPage('https://some-preview.example.net/', placementIsKnown), false)
   // Another surface's hostname is not this one either: `hub` IS known, so the apex comes out right
   // and every link works — but this bundle is not what belongs there, and saying so is cheaper than
   // leaving somebody to wonder why the journal is being served from the hub.
   assert.equal(atPage('https://hub.cloudsforge.online/', placementIsKnown), false)
+  // The apex root is not the journal either, and this is the case a folder created. Nothing in the
+  // estate should serve this bundle at `/` — that address belongs to micro-site — and a gateway
+  // router that sent it there would otherwise look correct from inside the page.
+  assert.equal(atPage('https://cloudsforge.online/', placementIsKnown), false)
+  // NOR A PATH THAT MERELY STARTS WITH THE SAME LETTERS. `/journalism` is a different folder, and
+  // a bare `startsWith` on the base URL would call it this one.
+  assert.equal(atPage('https://cloudsforge.online/journalism', placementIsKnown), false)
+  // The retired hostname, during the redirect period and after it. A bundle actually SERVED there
+  // is misplaced — the gateway's job is to 301 that name at the folder, not to answer from it.
+  assert.equal(atPage('https://journal.cloudsforge.online/', placementIsKnown), false)
 })

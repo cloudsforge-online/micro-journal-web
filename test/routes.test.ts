@@ -33,11 +33,13 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   ARTICLE_PREFIX,
+  BASE,
   FEED_PATH,
   NAV,
   NON_INDEX_PATHS,
   ROUTES,
   articlePath,
+  publicPath,
   searchPath,
   topicPath,
 } from '../src/lib/routes.ts'
@@ -151,10 +153,16 @@ test('THE SPA FALLBACK IS ABSENT, AND THE 404 IS A PAGE OF ITS OWN', () => {
     'nginx.conf matches a directory again; an address that was never written would 301, not 404',
   )
 
-  // And a 404 page that is a FILE rather than the shell. `/404.html` is in `pageEntries()` with a
-  // head of its own; serving `/index.html` under a 404 instead would give every missing address the
-  // archive's title and the archive's description in a crawler's index.
-  assert.match(nginx, /error_page\s+404\s+\/404\.html/)
+  // And a 404 page that is a FILE rather than the shell. `/journal/404.html` is in `pageEntries()`
+  // with a head of its own; serving the shell under a 404 instead would give every missing address
+  // the archive's title and the archive's description in a crawler's index.
+  //
+  // MOUNTED, and `error_page` is the one directive where that is easy to get wrong in a way nothing
+  // else catches: it takes a URI and RE-ENTERS location matching with it, so an unprefixed
+  // `/404.html` would be matched by `location /` — which answers 404 — and nginx would serve its own
+  // built-in error body instead of the designed page, on every miss, forever.
+  assert.match(nginx, new RegExp(`error_page\\s+404\\s+${BASE}/404\\.html`))
+  assert.doesNotMatch(nginx, /error_page\s+404\s+\/404\.html/)
   assert.doesNotMatch(nginx, /error_page\s+404\s+\/index\.html/)
 })
 
@@ -177,10 +185,15 @@ test('THE ORIGIN SUBSTITUTION IS INTACT, INCLUDING THE TWO LINES NOBODY REMEMBER
   // publisher logo, every image — so the default substitutes the canonical and ships the rest raw.
   assert.match(nginx, /sub_filter_once\s+off/)
 
-  // TYPES. The default is text/html alone, and the three files whose whole content is absolute URLs
+  // TYPES. The default is text/html alone, and the two files whose whole content is absolute URLs
   // are not HTML. Each is asserted by name because each is a different failure: a feed nobody can
-  // subscribe to, a sitemap every entry of which is rejected, and a robots.txt whose Sitemap line
-  // points at a host called `__CF_ORIGIN__`.
+  // subscribe to, and a sitemap every entry of which is rejected.
+  //
+  // `text/plain` was a third entry here, for the `robots.txt` this surface no longer serves — see
+  // the test below on why the folder deleted it rather than prefixing it. It stays in the list
+  // because `location = /healthz` declares `default_type text/plain` and the cost of covering a
+  // two-byte response is nothing, while a type dropped from this line is invisible until somebody
+  // reads a feed.
   const types = /sub_filter_types([^;]+);/.exec(nginx)?.[1] ?? ''
   for (const type of ['text/html', 'application/xml', 'application/rss+xml', 'text/plain']) {
     assert.ok(types.includes(type), `sub_filter_types does not cover ${type}`)
@@ -203,35 +216,141 @@ test('THE SITEMAP AND THE FEED ARE FILES, NOT STRINGS IN THE WEB SERVER', () => 
   // Asserted as an absence, because the `return 200` version is what this file was forked from and
   // it would keep working — it would just freeze the sitemap at the four addresses it was written
   // with, and quietly stop declaring every article published after that.
-  const sitemap = nginx.slice(nginx.indexOf('location = /sitemap.xml'))
+  const sitemap = nginx.slice(nginx.indexOf(`location = ${BASE}/sitemap.xml`))
   assert.doesNotMatch(sitemap.slice(0, 600), /return\s+200\s+'<\?xml/)
 
   // Both are served with a type that is decided rather than inherited from the `.xml` in the URI.
-  assert.match(nginx, /location = \/feed\.xml[\s\S]{0,400}?default_type application\/rss\+xml/)
-  assert.match(nginx, /location = \/sitemap\.xml[\s\S]{0,400}?default_type application\/xml/)
+  assert.match(
+    nginx,
+    new RegExp(`location = ${BASE}/feed\\.xml[\\s\\S]{0,400}?default_type application/rss\\+xml`),
+  )
+  assert.match(
+    nginx,
+    new RegExp(`location = ${BASE}/sitemap\\.xml[\\s\\S]{0,400}?default_type application/xml`),
+  )
 
   // The feed's path is a constant in routes.ts because it is quoted in the head, in the footer and
-  // on the about page; nginx has to serve the same one.
-  assert.equal(FEED_PATH, '/feed.xml')
+  // on the about page; nginx has to serve the same one. PUBLIC, unlike every other path in that
+  // module — the feed is a file rather than a route, so `basename` never sees it and it carries the
+  // mount itself.
+  assert.equal(FEED_PATH, '/journal/feed.xml')
+  assert.equal(FEED_PATH, `${BASE}/feed.xml`)
 })
 
-test('A NON-MAINNET ARCHIVE IS NOT INDEXED, AND THE THREE GATES ALL SAY SO', () => {
+test('A NON-MAINNET ARCHIVE IS NOT INDEXED, AND THE TWO GATES LEFT HERE SAY SO', () => {
   // Every article is byte-identical on both networks — there is no chain data in an essay — so the
   // two archives are not similar pages, they are THE SAME PAGE at two addresses. A search engine
   // picks one canonical and suppresses the other, and which one it picks is not ours to decide.
   //
-  // Three gates, because a crawler that ignores one still meets the next: no sitemap to read, no
-  // feed to subscribe to, and a robots.txt that refuses everything.
-  const gated = [...nginx.matchAll(/location = \/(sitemap\.xml|feed\.xml)\b([\s\S]*?)\n    \}/g)]
+  // TWO gates rather than three, and the third did not weaken — it moved. The robots.txt gate is
+  // now the apex's, which already answers `Disallow: /` on every non-mainnet hostname, so the
+  // testnet archive is refused by the host that serves it instead of by a rule this repository has
+  // to remember to keep. These two stay here because they are files a machine asks for BY NAME
+  // under this mount, and nothing outside this container knows they exist.
+  const gated = [
+    ...nginx.matchAll(
+      new RegExp(`location = ${BASE}/(sitemap\\.xml|feed\\.xml)\\b([\\s\\S]*?)\\n    \\}`, 'g'),
+    ),
+  ]
   assert.equal(gated.length, 2, 'the sitemap and the feed are not both present as exact locations')
   for (const [, name, body] of gated) {
     assert.match(body ?? '', /if \(\$cf_env\) \{ return 404; \}/, `/${name} is not gated on $cf_env`)
   }
+})
 
-  // The robots gate is a `return`, and its body is written across REAL LINES. nginx does not process
-  // backslash escapes in a quoted string, so `'Disallow: /\n'` emits a literal backslash and an n.
-  const robots = nginx.slice(nginx.indexOf('location = /robots.txt'))
-  assert.match(robots.slice(0, 1200), /if \(\$cf_env\) \{ return 200 'User-agent: \*\nDisallow: \//)
+test('THERE IS NO robots.txt IN THIS FILE, AND DELETING IT WAS THE POINT OF THE FOLDER', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // A CRAWLER READS robots.txt AT THE ORIGIN ROOT AND NOWHERE ELSE.
+  //
+  // There is no such thing as a robots file for a subdirectory. So the two candidate moves were
+  // both worse than deletion, and the second is the one somebody will reach for:
+  //
+  //   `location = /robots.txt` KEPT UNPREFIXED — this image would then answer for an apex address
+  //   it does not own, contradicting micro-site's own robots.txt on whichever of them the gateway
+  //   happened to route. Two documents disagreeing about what may be crawled is worse than either.
+  //
+  //   `location = /journal/robots.txt` — prefixed like everything else, and a file nothing will
+  //   ever request. The only copy of the `Disallow: /search` rule would sit in a document no
+  //   machine opens, while `/journal/search?q=…` became crawlable for the first time in this
+  //   publication's life. A search page mints a distinct address for every string anybody has
+  //   typed, so forty pieces of writing get indexed as four thousand near-empty results.
+  //
+  // Both lines are in micro-site's apex robots.txt now: `Disallow: /journal/search`, and a second
+  // `Sitemap:` naming the file this container still serves. `robotsTxt()` in `src/lib/syndication.ts`
+  // went with them, and `test/prerender.test.ts` asserts nothing writes the file into `dist`.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  assert.doesNotMatch(
+    nginx,
+    /location\s*=?\s*[^;{]*robots\.txt/,
+    'nginx.conf serves a robots.txt again; at the root it contradicts the apex, and under the ' +
+      'mount it is a document no crawler will ever open',
+  )
+  assert.doesNotMatch(stripComments(read('src/lib/syndication.ts'), 'ts'), /robotsTxt/)
+})
+
+test('EVERY location IS UNDER THE MOUNT, AND THE ONE THAT IS NOT BELONGS TO THE CONTAINER', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // The check that catches a half-migrated file, which is the failure mode of a change like this
+  // one: a `location` left at the root answers for an address that belongs to micro-site, and the
+  // gateway routes those elsewhere — so it is dead config that reads as live, until the day a
+  // router changes and this container starts answering for the marketing site.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  const paths = [...nginx.matchAll(/^\s*location\s+(?:(=|\^~|~\*?)\s+)?(\S+)\s*\{/gm)].map(
+    ([, modifier, path]) => ({ modifier: modifier ?? '', path: path ?? '' }),
+  )
+  assert.ok(paths.length >= 8, 'nginx.conf has lost its locations, or their shape has changed')
+
+  for (const { modifier, path } of paths) {
+    // `location /` is the catch-all that answers 404 for everything outside the mount, and
+    // `/healthz` is the container's own probe: it is dialled by the Dockerfile's HEALTHCHECK and by
+    // the deployment's readiness probe, both of which reach the pod on 8080 directly and neither of
+    // which knows or should know where the gateway mounts this bundle. A `/journal/healthz` would
+    // also be a PUBLIC address answering 200 to anything that asked.
+    if (path === '/' || path === '/healthz') continue
+    const mounted = modifier.startsWith('~') ? path.startsWith(`^${BASE}/`) : path.startsWith(BASE)
+    assert.ok(mounted, `nginx.conf serves ${path}, which is outside ${BASE}`)
+  }
+
+  // AND THE CATCH-ALL RETURNS 404 RATHER THAN REDIRECTING TO THE MOUNT. A redirect would make this
+  // container answer plausibly for addresses it does not own, which is the failure micro-org#428
+  // recorded: a stale Traefik router pointing at the wrong backend is invisible for as long as the
+  // wrong backend replies with something that looks like a page.
+  assert.match(nginx, /location \/ \{\s*return 404;\s*\}/)
+
+  // ── AND NOT ONE PREFIX IS `^~`, WHICH IS THE ORDERING TRAP THIS FILE'S HEADER ARGUES ABOUT ─────
+  //
+  // nginx picks a location by: exact `=` first and it wins outright; then the LONGEST matching
+  // prefix; then — unless that prefix carried `^~` — every regex in file order, and a regex that
+  // matches beats the prefix. `^~ /journal/` is the natural-looking way to say "everything under
+  // the mount is mine" and it would silently take the favicon regex out of the running: the share
+  // card would be served by the catch-all with `no-store` instead of a week, so every link-preview
+  // fetcher that ever draws a card for this publication would re-fetch the picture, forever, for
+  // every paste. Invisible in a browser, and it is not the sort of thing anybody measures.
+  assert.doesNotMatch(
+    nginx,
+    /location\s+\^~/,
+    'a `^~` prefix suppresses the favicon regex below it, and the share card loses its cache',
+  )
+})
+
+test('THE FRONT DOOR HAS NO TRAILING SLASH AND DOES NOT REDIRECT TO ONE', () => {
+  // `/journal` is the address on the tile, in the product menu, in the estate's footer and in every
+  // link from the rest of the estate. A 301 on the publication's front door is a hop every crawler,
+  // every link checker and every share-card fetcher pays on the way in, and the estate's own links
+  // would all be pointing at the redirect rather than the page.
+  //
+  // nginx would normally see the URI map to a directory and emit the slash-redirect itself. It
+  // never gets the chance: an EXACT location wins outright, and `try_files` with a LITERAL filename
+  // is a file lookup rather than a directory test — try_files decides "this element is a directory
+  // test" from the trailing slash written in the config at parse time, not from what a variable
+  // expands to at request time.
+  assert.match(nginx, new RegExp(`location = ${BASE} \\{[\\s\\S]{0,200}?try_files ${BASE}/index\\.html =404;`))
+
+  // The canonical, the sitemap's first entry and the feed's channel link are all the same string,
+  // and it is the one with no slash on the end. Two addresses with a redirect between them is the
+  // shape this whole surface avoids.
+  assert.equal(publicPath('/'), BASE)
+  assert.doesNotMatch(nginx, new RegExp(`return\\s+30\\d\\s+${BASE}/`))
 })
 
 test('THIS CONTAINER PROXIES NOTHING, AND HAS NOTHING TO PROXY TO', () => {

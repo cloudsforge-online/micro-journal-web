@@ -95,10 +95,17 @@
 
     <!--
       The feed, declared where a reader's browser extension and a feed reader both look for it.
-      Relative, because it resolves against whichever origin served the page — the same rule the
-      rest of this bundle follows, and the reason nothing below it can be.
+      Origin-relative, because it resolves against whichever host served the page — the same rule
+      the rest of this bundle follows, and the reason nothing below it can be.
+
+      THE MOUNT IS WRITTEN OUT HERE AND NOT ABOVE, AND THE DIFFERENCE IS VITE. The favicon hrefs on
+      the four lines above stay at the root in this file because vite rewrites them at build time:
+      it recognises `.png` as an asset and prepends `base` (`/journal/`), which is visible in
+      `dist/index.html`. It does NOT do that for `.xml`, which it has no reason to treat as an
+      asset — so this one address is the one place in this file the mount has to be typed, and
+      `test/routes.test.ts` checks it against `FEED_PATH`.
     -->
-    <link rel="alternate" type="application/rss+xml" title="Forge Journal" href="/feed.xml" />
+    <link rel="alternate" type="application/rss+xml" title="Forge Journal" href="/journal/feed.xml" />
 
     <!--
       ══════════════════════════════════════════════════════════════════════════════════════════
@@ -132,14 +139,14 @@
     <meta property="og:locale" content="en_GB" />
     <meta property="og:title" content="Forge Journal" />
     <meta property="og:description" content="Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds on its own chain. No jargon, no price talk, nothing to sign up for." />
-    <meta property="og:url" content="__CF_ORIGIN__/" />
-    <meta property="og:image" content="__CF_ORIGIN__/og-1200x630.png" />
+    <meta property="og:url" content="__CF_ORIGIN__/journal" />
+    <meta property="og:image" content="__CF_ORIGIN__/journal/og-1200x630.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Forge Journal" />
     <meta name="twitter:description" content="Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds on its own chain. No jargon, no price talk, nothing to sign up for." />
-    <meta name="twitter:image" content="__CF_ORIGIN__/og-1200x630.png" />
-    <link rel="canonical" href="__CF_ORIGIN__/" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"__CF_ORIGIN__/#site","name":"Forge Journal","alternateName":"CloudsForge Journal","url":"__CF_ORIGIN__/","description":"Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds on its own chain. No jargon, no price talk, nothing to sign up for.","inLanguage":"en-GB","publisher":{"@type":"Organization","name":"CloudsForge","logo":{"@type":"ImageObject","url":"__CF_ORIGIN__/favicon-512x512.png","width":512,"height":512}},"potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"__CF_ORIGIN__/search?q={search_term_string}"},"query-input":"required name=search_term_string"}}</script>
+    <meta name="twitter:image" content="__CF_ORIGIN__/journal/og-1200x630.png" />
+    <link rel="canonical" href="__CF_ORIGIN__/journal" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"__CF_ORIGIN__/journal#site","name":"Forge Journal","alternateName":"CloudsForge Journal","url":"__CF_ORIGIN__/journal","description":"Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds on its own chain. No jargon, no price talk, nothing to sign up for.","inLanguage":"en-GB","publisher":{"@type":"Organization","name":"CloudsForge","logo":{"@type":"ImageObject","url":"__CF_ORIGIN__/journal/favicon-512x512.png","width":512,"height":512}},"potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"__CF_ORIGIN__/journal/search?q={search_term_string}"},"query-input":"required name=search_term_string"}}</script>
     <!-- cf:head:end -->
   </head>
   <body>

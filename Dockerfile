@@ -113,7 +113,24 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # `test/seo.test.ts` fails if the directive appears.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
-COPY --from=build /app/dist /usr/share/nginx/html
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# INTO html/journal/ AND NOT INTO html/, WHICH IS THE FILESYSTEM HALF OF THE MOUNT.
+#
+# This publication is a FOLDER on the apex now — `/journal`, wave 1 of the consolidation in
+# micro-deploy `docs/apex-consolidation.md` — and nothing strips the prefix on the way in. The
+# gateway routes `PathPrefix('/journal')` to this container and passes the URI through whole, so
+# nginx is asked for `/journal/a/<slug>` and `root` + that URI has to be a real file.
+#
+# The alternative was a `StripPrefix` middleware and an untouched layout, and it was rejected for
+# one property: with the prefix carried all the way down, the address is the same string in every
+# place it appears — in `vite.config.ts`'s `base`, in `basename`, in every `location` below, on
+# disk, in `pnpm dev`, in `vite preview`, in a probe against this container, and in a reader's
+# address bar. A stripping middleware makes the container the one place it is different, which is
+# the place nobody looks when a path 404s.
+#
+# `test/routes.test.ts` reads this line back against `BASE` in `src/lib/routes.ts`.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+COPY --from=build /app/dist /usr/share/nginx/html/journal
 
 EXPOSE 8080
 

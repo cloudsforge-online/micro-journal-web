@@ -40,13 +40,15 @@
 import {
   applyHead as applySurfaceHead,
   canonicalHref,
+  DEFAULT_OG_IMAGE,
   metaTags,
   surfaceMeta,
   type MetaTag,
+  type PageMetaInput,
   type SurfaceMeta,
 } from '@cloudsforge/ui/seo'
 import type { Article, Tag } from '../content/types.ts'
-import { articlePath, topicPath } from './routes.ts'
+import { articlePath, publicPath, topicPath } from './routes.ts'
 
 /** What the prerender writes where an origin belongs. Replaced by nginx, never by a bundler. */
 export const ORIGIN_PLACEHOLDER = '__CF_ORIGIN__'
@@ -75,8 +77,47 @@ export interface PageHead {
   readonly jsonLd: readonly Record<string, unknown>[]
 }
 
+/**
+ * A mount-relative path as the absolute URL a crawler is handed.
+ *
+ * ── ONE RULE FOR THE WHOLE MODULE, BECAUSE THE ALTERNATIVE IS A PATH THAT IS PREFIXED TWICE ──────
+ *
+ * Every path written in this file is MOUNT-RELATIVE — `/`, `/about`, `/search`,
+ * `articlePath(slug)`, `/favicon-512x512.png`, `article.card`. That is true of the assets as well as
+ * the routes: `public/` is copied into the bundle and the bundle is served under `/journal`, so the
+ * favicon really is at `/journal/favicon-512x512.png`.
+ *
+ * This function is the door out, and `publicPath()` is the only other one — used where a value goes
+ * UPSTREAM to `surfaceMeta()`, which composes the canonical and `og:url` with an `absolute()` of its
+ * own and knows nothing about a base. Nothing else in this file may concatenate `BASE`.
+ */
 function absolute(path: string, origin: string): string {
-  return origin === '' ? path : `${origin}${path}`
+  const mounted = publicPath(path)
+  return origin === '' ? mounted : `${origin}${mounted}`
+}
+
+/**
+ * `surfaceMeta()` for this surface, with the mount applied to BOTH addresses it composes.
+ *
+ * The shared module knows a registry row and an origin and nothing else; `canonicalHref()` and the
+ * `og:image` tag are each `origin + the string it was handed`, so a mount-relative path crossing
+ * into it comes back out claiming to live at the apex root. Every call below therefore passes
+ * mount-relative values and this function is the door — the second half of the rule stated above
+ * `absolute()`, and the reason no call site repeats `publicPath()` twice on one line.
+ *
+ * THE IMAGE DEFAULT IS THE HALF THAT WAS ACTUALLY WRONG, and it is worth naming because it is
+ * invisible on every page a person looks at. `surfaceMeta()` falls back to `DEFAULT_OG_IMAGE` when
+ * a page has no card of its own, which is every page here except an article — so without this line
+ * the home page, Topics, About, the search page and the 404 would all advertise a share card at
+ * `/og-1200x630.png`, an address that belongs to the marketing site and answers with ITS card.
+ * Nothing breaks: a link to the journal simply unfurls with somebody else's picture on it.
+ */
+function journalMeta(page: PageMetaInput & { readonly path: string }): SurfaceMeta {
+  return surfaceMeta('journal', {
+    ...page,
+    path: publicPath(page.path),
+    image: publicPath(page.image ?? DEFAULT_OG_IMAGE),
+  })
 }
 
 /**
@@ -119,7 +160,7 @@ function breadcrumb(
 
 export function homeHead(description: string, origin: string = ORIGIN_PLACEHOLDER): PageHead {
   return {
-    meta: surfaceMeta('journal', { description, path: '/' }),
+    meta: journalMeta({ description, path: '/' }),
     kind: 'website',
     article: null,
     jsonLd: [
@@ -174,7 +215,10 @@ export function articleHead(
   // from HTTP headers, which change on every deploy of every article at once.
   const modifiedAt = article.updatedAt ?? article.publishedAt
   return {
-    meta: surfaceMeta('journal', {
+    // The one page with a card of its own, drawn from its own headline by `scripts/make-assets.ts`.
+    // `journalMeta()` mounts it exactly as it mounts the path; everything below stays
+    // mount-relative and goes through `absolute()`.
+    meta: journalMeta({
       title: article.title,
       description: article.description,
       path,
@@ -216,7 +260,7 @@ export function articleHead(
 export function topicHead(tag: Tag, count: number, origin: string = ORIGIN_PLACEHOLDER): PageHead {
   const path = topicPath(tag.slug)
   return {
-    meta: surfaceMeta('journal', { title: tag.name, description: tag.blurb, path }),
+    meta: journalMeta({ title: tag.name, description: tag.blurb, path }),
     kind: 'website',
     article: null,
     jsonLd: [
@@ -246,7 +290,7 @@ export function topicHead(tag: Tag, count: number, origin: string = ORIGIN_PLACE
 
 export function topicsHead(description: string, origin: string = ORIGIN_PLACEHOLDER): PageHead {
   return {
-    meta: surfaceMeta('journal', { title: 'Topics', description, path: '/topics' }),
+    meta: journalMeta({ title: 'Topics', description, path: '/topics' }),
     kind: 'website',
     article: null,
     jsonLd: [
@@ -274,7 +318,7 @@ export function topicsHead(description: string, origin: string = ORIGIN_PLACEHOL
 
 export function aboutHead(description: string, origin: string = ORIGIN_PLACEHOLDER): PageHead {
   return {
-    meta: surfaceMeta('journal', { title: 'About', description, path: '/about' }),
+    meta: journalMeta({ title: 'About', description, path: '/about' }),
     kind: 'website',
     article: null,
     jsonLd: [
@@ -314,7 +358,7 @@ export function aboutHead(description: string, origin: string = ORIGIN_PLACEHOLD
  */
 export function searchHead(description: string, _origin: string = ORIGIN_PLACEHOLDER): PageHead {
   return {
-    meta: surfaceMeta('journal', {
+    meta: journalMeta({
       title: 'Search',
       description,
       path: '/search',
@@ -328,7 +372,7 @@ export function searchHead(description: string, _origin: string = ORIGIN_PLACEHO
 
 export function notFoundHead(description: string, _origin: string = ORIGIN_PLACEHOLDER): PageHead {
   return {
-    meta: surfaceMeta('journal', {
+    meta: journalMeta({
       title: 'Page not found',
       description,
       path: '/404',
