@@ -645,7 +645,7 @@ jobs:
             *'__CF_ORIGIN__'*) echo "::error::an article shipped with the origin placeholder still in it"; fail=1 ;;
           esac
           case "$article" in
-            *"https://$host/a/nine-ways-people-lose-crypto"*) ;;
+            *"https://$host$BASE/a/nine-ways-people-lose-crypto"*) ;;
             *) echo "::error::the article's canonical does not name the host it was fetched from"; fail=1 ;;
           esac
           # And the same file, fetched as a different host, says the other thing. This is the whole
@@ -653,7 +653,7 @@ jobs:
           other=$(curl -s -m 5 -H 'Host: journal-testnet.cloudsforge.online' \
                     "http://127.0.0.1:8080$BASE/a/nine-ways-people-lose-crypto" || true)
           case "$other" in
-            *'https://journal-testnet.cloudsforge.online/a/nine-ways-people-lose-crypto'*) ;;
+            *"https://journal-testnet.cloudsforge.online$BASE/a/nine-ways-people-lose-crypto"*) ;;
             *) echo "::error::the canonical did not follow the request host"; fail=1 ;;
           esac
 
@@ -674,8 +674,8 @@ jobs:
           sitemap=$(get /sitemap.xml)
           for path in /a/nine-ways-people-lose-crypto /topics/starting-out /about; do
             case "$sitemap" in
-              *"<loc>https://$host$path</loc>"*) ;;
-              *) echo "::error::$path is not in the sitemap"; fail=1 ;;
+              *"<loc>https://$host$BASE$path</loc>"*) ;;
+              *) echo "::error::$BASE$path is not in the sitemap"; fail=1 ;;
             esac
           done
           case "$sitemap" in
