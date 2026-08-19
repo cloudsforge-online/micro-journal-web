@@ -115,7 +115,24 @@ function absolute(path: string, origin: string): string {
 function journalMeta(page: PageMetaInput & { readonly path: string }): SurfaceMeta {
   return surfaceMeta('journal', {
     ...page,
-    path: publicPath(page.path),
+    // ── THE PATH IS NO LONGER MOUNTED HERE, BECAUSE `surfaceMeta()` DOES IT NOW ────────────────
+    //
+    // This wrapper existed because the shared module knew a registry row and an origin and
+    // nothing else, so a mount-relative path crossing into it came back claiming to live at the
+    // apex root. That was true, and it stayed true for `exchange` and `market` — which had no
+    // wrapper, and which therefore shipped a canonical pointing at a 404 on every page
+    // (`https://cloudsforge.online/collections`, measured 2026-08-19: 404).
+    //
+    // So the fix went where it belonged: `surfaceMeta()` reads `basePath` off the registry, for
+    // every surface that serves its own bundle. This line would now apply it TWICE —
+    // `/journal/journal` — which is what micro-ui#30's CI run caught here.
+    //
+    // The IMAGE still goes through `publicPath()` and that is not an oversight. `surfaceMeta()`
+    // mounts the canonical and `og:url`; the image is a static asset served out of this bundle's
+    // own directory, and the shared module has no reason to know that. Without this line every
+    // page without a card of its own would advertise `/og-1200x630.png` — the marketing site's,
+    // which answers with ITS picture.
+    path: page.path,
     image: publicPath(page.image ?? DEFAULT_OG_IMAGE),
   })
 }
