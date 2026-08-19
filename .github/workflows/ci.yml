@@ -322,7 +322,7 @@ jobs:
             echo "::error::the chain matches a directory again; /a would 301 instead of 404"
             exit 1
           fi
-          grep -q 'error_page 404 /404.html' <<<"$directives" || {
+          grep -q 'error_page 404 /journal/404.html' <<<"$directives" || {
             echo "::error::there is no designed page under the real 404 status"; exit 1; }
           echo "ok: unknown addresses answer 404"
 
@@ -333,13 +333,20 @@ jobs:
         # from `src/content/`, so a new article is in the sitemap because it exists rather than
         # because somebody remembered.
         #
-        # The one `return 200` that IS allowed is the non-mainnet robots.txt — and it is written
-        # across real lines, because nginx does not process backslash escapes in a quoted string.
-        # `'Disallow: /\n'` emits a literal backslash and an n, and a strict parser drops the
-        # directive. The copy of this file on exchange-web has that bug in it, harmlessly.
+        # THE `return 200` EXEMPTION THIS PARAGRAPH DESCRIBED IS GONE, along with the robots.txt
+        # block it covered. It also carried a claim that was simply false — that nginx does not
+        # process backslash escapes in a quoted string, so `'Disallow: /\n'` emits a literal
+        # backslash and an n — and named exchange-web as carrying "that bug". Measured against a
+        # running pod on 2026-08-19: `return 200 'User-agent: *\nDisallow: /\n'` produces real
+        # 0x0A bytes. nginx interprets the escape. Corrected in micro-journal-web 9c3ccca; recorded
+        # here because this file is where the claim was repeated.
         run: |
           set -uo pipefail
-          for f in feed.xml sitemap.xml robots.txt; do
+          # robots.txt WAS IN THIS LIST AND IS NOT ANY MORE. The build stopped writing one when the
+          # archive became `<apex>/journal`: a crawler reads robots.txt at the origin root, so a
+          # copy in this bundle would be written, shipped and never fetched. micro-site's is the
+          # one that decides whether this surface is indexed.
+          for f in feed.xml sitemap.xml; do
             grep -q "$f" scripts/prerender.ts || {
               echo "::error::$f is no longer written by the build"; exit 1; }
           done
@@ -555,17 +562,38 @@ jobs:
         run: |
           set -uo pipefail
           docker run -d --name ci-journal-web -p 127.0.0.1:8080:8080 journal-web:ci
+
+          # ── EVERY PROBE BELOW CARRIES THE MOUNT, AND ONE VARIABLE IS WHY ─────────────────────
+          #
+          # The archive is `<apex>/journal` since 2026-08-19 (micro-deploy
+          # `docs/apex-consolidation.md`), and this whole step was written when it was a hostname:
+          # it probed `/`, `/about`, `/feed.xml` and got 404 for every one of them on the first
+          # build after the move. The image was correct and the checks were not, which is the good
+          # direction for this to fail in — but it is the second time in this migration that a
+          # check's pattern named a path and stopped meaning what it said when the path moved.
+          #
+          # `BASE` is prepended by `get` and `status` rather than written into each probe, so the
+          # forty-odd addresses below read as ROUTER paths — the same way `src/lib/routes.ts` holds
+          # them — and there is exactly one line to change if the mount ever moves again.
+          BASE=/journal
+
           for _ in $(seq 1 30); do
-            code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ || true)
+            code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080$BASE" || true)
             [ "$code" = "200" ] && break
             sleep 1
           done
-          [ "${code:-}" = "200" ] || { echo "::error::the image returned ${code:-no answer} for /"; docker logs --tail 60 ci-journal-web; exit 1; }
+          [ "${code:-}" = "200" ] || { echo "::error::the image returned ${code:-no answer} for $BASE"; docker logs --tail 60 ci-journal-web; exit 1; }
+
+          # AND NOTHING IS SERVED OUTSIDE IT. The apex root belongs to micro-site; this container
+          # answering anything there would mean the gateway could serve the wrong bundle for `/`
+          # and nobody would see it (micro-org#428 is that failure, twice).
+          root=$(curl -s -m 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ || true)
+          [ "$root" = "404" ] || { echo "::error::the image answered $root for /, which is outside its mount and belongs to micro-site"; exit 1; }
 
           fail=0
           host='journal.cloudsforge.online'
-          get() { curl -s -m 5 -H "Host: $host" "http://127.0.0.1:8080$1" || true; }
-          status() { curl -s -m 5 -o /dev/null -w '%{http_code}' -H "Host: $host" "http://127.0.0.1:8080$1" || true; }
+          get() { curl -s -m 5 -H "Host: $host" "http://127.0.0.1:8080$BASE$1" || true; }
+          status() { curl -s -m 5 -o /dev/null -w '%{http_code}' -H "Host: $host" "http://127.0.0.1:8080$BASE$1" || true; }
 
           # ── every address a reader can be given, cold ──────────────────────────────────────────
           # These are links pasted into conversations and returned by search engines; every one of
@@ -617,15 +645,15 @@ jobs:
             *'__CF_ORIGIN__'*) echo "::error::an article shipped with the origin placeholder still in it"; fail=1 ;;
           esac
           case "$article" in
-            *"https://$host/a/nine-ways-people-lose-crypto"*) ;;
+            *"https://$host$BASE/a/nine-ways-people-lose-crypto"*) ;;
             *) echo "::error::the article's canonical does not name the host it was fetched from"; fail=1 ;;
           esac
           # And the same file, fetched as a different host, says the other thing. This is the whole
           # argument for the placeholder: one image, two archives, each honest about where it is.
           other=$(curl -s -m 5 -H 'Host: journal-testnet.cloudsforge.online' \
-                    http://127.0.0.1:8080/a/nine-ways-people-lose-crypto || true)
+                    "http://127.0.0.1:8080$BASE/a/nine-ways-people-lose-crypto" || true)
           case "$other" in
-            *'https://journal-testnet.cloudsforge.online/a/nine-ways-people-lose-crypto'*) ;;
+            *"https://journal-testnet.cloudsforge.online$BASE/a/nine-ways-people-lose-crypto"*) ;;
             *) echo "::error::the canonical did not follow the request host"; fail=1 ;;
           esac
 
@@ -638,7 +666,7 @@ jobs:
           case "$feed" in
             *'__CF_ORIGIN__'*) echo "::error::the feed shipped with the placeholder; check sub_filter_types"; fail=1 ;;
           esac
-          feed_type=$(curl -sI -H "Host: $host" http://127.0.0.1:8080/feed.xml | tr -d '\r' | grep -i '^content-type:' || true)
+          feed_type=$(curl -sI -H "Host: $host" "http://127.0.0.1:8080$BASE/feed.xml" | tr -d '\r' | grep -i '^content-type:' || true)
           case "$feed_type" in
             *'application/rss+xml'*) ;;
             *) echo "::error::the feed is served as '${feed_type:-nothing}'; some readers refuse text/xml"; fail=1 ;;
@@ -646,8 +674,8 @@ jobs:
           sitemap=$(get /sitemap.xml)
           for path in /a/nine-ways-people-lose-crypto /topics/starting-out /about; do
             case "$sitemap" in
-              *"<loc>https://$host$path</loc>"*) ;;
-              *) echo "::error::$path is not in the sitemap"; fail=1 ;;
+              *"<loc>https://$host$BASE$path</loc>"*) ;;
+              *) echo "::error::$BASE$path is not in the sitemap"; fail=1 ;;
             esac
           done
           case "$sitemap" in
@@ -659,30 +687,32 @@ jobs:
           # so these are not similar pages, they are the same page at two addresses. Left alone, a
           # search engine picks a canonical and suppresses the other, and which one it picks is not
           # ours to decide.
-          robots_testnet=$(curl -s -H 'Host: journal-testnet.cloudsforge.online' http://127.0.0.1:8080/robots.txt || true)
-          case "$robots_testnet" in
-            *'Disallow: /'*) ;;
-            *) echo "::error::a non-mainnet hostname does not refuse crawlers"; fail=1 ;;
-          esac
-          case "$robots_testnet" in
-            *'\n'*) echo "::error::the testnet robots.txt contains a literal backslash-n"; fail=1 ;;
-          esac
           for machine in /sitemap.xml /feed.xml; do
-            env404=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H 'Host: journal-testnet.cloudsforge.online' "http://127.0.0.1:8080$machine" || true)
+            env404=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H 'Host: journal-testnet.cloudsforge.online' "http://127.0.0.1:8080$BASE$machine" || true)
             [ "$env404" = "404" ] || { echo "::error::a non-mainnet hostname served $machine ($env404)"; fail=1; }
           done
-          robots_mainnet=$(get /robots.txt)
-          case "$robots_mainnet" in
-            *'Allow: /'*) ;;
-            *) echo "::error::the mainnet hostname refuses crawlers; this surface exists to be found"; fail=1 ;;
-          esac
-          case "$robots_mainnet" in
-            *"Sitemap: https://$host/sitemap.xml"*) ;;
-            *) echo "::error::robots.txt does not point at the sitemap on this host"; fail=1 ;;
-          esac
+
+          # ── THE robots.txt ASSERTIONS ARE GONE, AND THAT IS THE MOVE RATHER THAN A LOSS ───────
+          #
+          # Four assertions stood here: that a non-mainnet host refuses crawlers, that its file has
+          # no literal backslash-n, that mainnet allows them, and that it names the sitemap. All
+          # four read `/robots.txt` FROM THIS IMAGE, and this image no longer serves one — a
+          # crawler reads robots.txt at the ORIGIN ROOT and nowhere else, so `/journal/robots.txt`
+          # is a file nothing fetches on any host. `micro-site` owns the rules for this origin and
+          # its own CI asserts them, including the `Sitemap:` line pointing here.
+          #
+          # What remains asserted HERE is the half that is still this image's to answer: a
+          # non-mainnet hostname serves no sitemap and no feed (above), which is the duplicate
+          # -content protection the `Disallow` was a second layer of.
+          #
+          # ASSERTED AS AN ABSENCE, because a `robots.txt` reappearing in this container would be
+          # two images claiming one address on one origin, with the gateway deciding which of them
+          # sets the indexing policy for the whole apex.
+          rb=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H "Host: $host" http://127.0.0.1:8080/robots.txt || true)
+          [ "$rb" = "404" ] || { echo "::error::this image answered $rb for /robots.txt; that address belongs to micro-site"; fail=1; }
 
           # This public surface must NOT be kept out of an index by a header either.
-          xrobots=$(curl -sI -H "Host: $host" http://127.0.0.1:8080/ | tr -d '\r' | grep -ci '^X-Robots-Tag:' || true)
+          xrobots=$(curl -sI -H "Host: $host" "http://127.0.0.1:8080$BASE" | tr -d '\r' | grep -ci '^X-Robots-Tag:' || true)
           [ "${xrobots:-0}" = "0" ] || { echo "::error::this public surface sends X-Robots-Tag"; fail=1; }
 
           # ── headers, on every kind of thing this image serves ──────────────────────────────────
@@ -694,8 +724,10 @@ jobs:
               *) echo "::error::$4 has the wrong $2 (got '${got:-nothing}', wanted '$3')"; fail=1 ;;
             esac
           }
-          asset=$(get / | grep -oE '/assets/[^"]+\.js' | head -1)
-          for target in "/" "/a/nine-ways-people-lose-crypto" "/articles/nine-ways-people-lose-crypto/card.png" "$asset"; do
+          asset=$(get / | grep -oE "$BASE/assets/[^\"]+\.js" | head -1)
+          # `$asset` is already an absolute path carrying the mount (vite's `base` put it there),
+          # so it is passed through while the three router paths gain `$BASE`.
+          for target in "$BASE" "$BASE/a/nine-ways-people-lose-crypto" "$BASE/articles/nine-ways-people-lose-crypto/card.png" "$asset"; do
             check "http://127.0.0.1:8080$target" X-Content-Type-Options "nosniff" "$target"
             # SAMEORIGIN rather than DENY: this is public writing and a sibling surface embedding an
             # article is a use, not an attack. The operator console uses DENY.
@@ -705,9 +737,9 @@ jobs:
           # `no-store` on the HTML is not caution, it is correctness: the body is per-request output
           # of sub_filter, so a cache keyed on the URL alone can hand the testnet body — canonical
           # and all — to a mainnet reader.
-          check "http://127.0.0.1:8080/" Cache-Control "no-store" "the archive"
-          check "http://127.0.0.1:8080/a/nine-ways-people-lose-crypto" Cache-Control "no-store" "an article"
-          check "http://127.0.0.1:8080/articles/nine-ways-people-lose-crypto/card.png" Cache-Control "max-age=604800" "a share card"
+          check "http://127.0.0.1:8080$BASE" Cache-Control "no-store" "the archive"
+          check "http://127.0.0.1:8080$BASE/a/nine-ways-people-lose-crypto" Cache-Control "no-store" "an article"
+          check "http://127.0.0.1:8080$BASE/articles/nine-ways-people-lose-crypto/card.png" Cache-Control "max-age=604800" "a share card"
           check "http://127.0.0.1:8080$asset" Cache-Control "immutable" "a hashed asset"
 
           # THE RELEASE IS STAMPED. It is what pins an error report to the deploy that introduced it.
