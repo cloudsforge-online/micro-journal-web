@@ -127,13 +127,21 @@ function journalMeta(page: PageMetaInput & { readonly path: string }): SurfaceMe
     // every surface that serves its own bundle. This line would now apply it TWICE —
     // `/journal/journal` — which is what micro-ui#30's CI run caught here.
     //
-    // The IMAGE still goes through `publicPath()` and that is not an oversight. `surfaceMeta()`
-    // mounts the canonical and `og:url`; the image is a static asset served out of this bundle's
-    // own directory, and the shared module has no reason to know that. Without this line every
-    // page without a card of its own would advertise `/og-1200x630.png` — the marketing site's,
-    // which answers with ITS picture.
+    // AND THE IMAGE IS THE SHARED MODULE'S NOW TOO. That sentence was written one commit ago and
+    // was already the wrong half of a true observation: the card really does live in this
+    // bundle's directory, and every page without one of its own really did advertise
+    // `/og-1200x630.png` — the marketing site's. But that was true of `market` and `exchange`
+    // as well, and measured on 2026-08-20 it was happening to them:
+    //
+    //     /og-1200x630.png          200   40,465 bytes   (micro-site's)
+    //     /market/og-1200x630.png   200   54,174 bytes   (Forge Market's own)
+    //
+    // So `surfaceMeta()` mounts the card for every surface that serves its own bundle, leaving an
+    // absolute URL alone, and this line would apply it twice. The rule this file states above
+    // `absolute()` is unchanged — nothing here concatenates `BASE` — it simply has one fewer
+    // exception to make.
     path: page.path,
-    image: publicPath(page.image ?? DEFAULT_OG_IMAGE),
+    image: page.image ?? DEFAULT_OG_IMAGE,
   })
 }
 
