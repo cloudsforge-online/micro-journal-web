@@ -9,7 +9,7 @@ export const article: Article = {
   authorId: 'cloudsforge',
   publishedAt: '2026-08-18',
   updatedAt: null,
-  tags: ['living-with-it', 'the-wider-world'],
+  tags: ['field-notes', 'the-wider-world'],
   hero: {
     src: '/articles/the-premium-was-the-product/hero.png',
     alt: 'A drawing of two stacked bars, the taller one shaded bronze and shrinking to meet the shorter one beneath it.',

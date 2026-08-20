@@ -9,7 +9,7 @@ export const article: Article = {
   authorId: 'cloudsforge',
   publishedAt: '2026-08-18',
   updatedAt: null,
-  tags: ['staying-safe', 'the-wider-world'],
+  tags: ['security', 'the-wider-world'],
   hero: {
     src: '/articles/a-tenth-way-to-lose-crypto/hero.png',
     alt: 'A drawing of a small sealed device with a keyhole in it, and a bronze key already lying on the far side of the case.',

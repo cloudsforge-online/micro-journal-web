@@ -44,6 +44,7 @@ import {
   topicPath,
 } from '../src/lib/routes.ts'
 import { read, stripComments } from './sources.ts'
+import { TAGS } from '../src/content/tags.ts'
 
 const nginx = stripComments(read('nginx.conf'), 'nginx')
 const app = stripComments(read('src/app.tsx'), 'ts')
@@ -350,7 +351,12 @@ test('THE FRONT DOOR HAS NO TRAILING SLASH AND DOES NOT REDIRECT TO ONE', () => 
   // and it is the one with no slash on the end. Two addresses with a redirect between them is the
   // shape this whole surface avoids.
   assert.equal(publicPath('/'), BASE)
-  assert.doesNotMatch(nginx, new RegExp(`return\\s+30\\d\\s+${BASE}/`))
+  // The TARGET is `/journal/` exactly — hence the terminating `;`. Written without it this read
+  // "no redirect anywhere under /journal/", which is a different and much larger claim than the one
+  // this test is named after, and it made the five topic-rename 301s below illegal. Redirecting a
+  // moved page to a deeper address is the opposite of the defect here: what is forbidden is landing
+  // a reader on the front door and bouncing them to a second spelling of it.
+  assert.doesNotMatch(nginx, new RegExp(`return\\s+30\\d\\s+${BASE}/;`))
 })
 
 test('THIS CONTAINER PROXIES NOTHING, AND HAS NOTHING TO PROXY TO', () => {
@@ -424,11 +430,11 @@ test('AN ARTICLE’S ADDRESS IS THE ONE THING HERE THAT CAN NEVER CHANGE', () =>
   // characters of nothing on every one of them. It is also NOT `/blog/`, which is a word about the
   // publisher rather than about the piece.
   assert.equal(ARTICLE_PREFIX, 'a')
-  assert.equal(topicPath('staying-safe'), '/topics/staying-safe')
+  assert.equal(topicPath('security'), '/topics/security')
 })
 
 test('SEARCH IS A QUERY, AND THAT IS THE DISTINCTION THE ROUTE TABLE DRAWS', () => {
-  // `/topics/staying-safe` identifies a resource that exists whether or not anybody asked for it.
+  // `/topics/security` identifies a resource that exists whether or not anybody asked for it.
   // `?q=wallet` identifies a question somebody typed. Putting the query in the path would put every
   // typo a reader makes into the sitemap's shape of address, and robots.txt would have to exclude a
   // path prefix rather than a parameter.
@@ -453,4 +459,39 @@ test('routes.ts imports nothing, so the prerender can read it without a bundler'
   // it unloadable under plain Node — which is where `scripts/prerender.ts` runs — and the build
   // would fail with a message about a stylesheet.
   assert.doesNotMatch(read('src/lib/routes.ts'), /^\s*import\s/m)
+})
+
+test('every renamed topic slug still resolves, by a 301 to a tag that exists', () => {
+  /*
+   * The taxonomy was renamed on 2026-08-21 (see `src/content/tags.ts`). Each of the five old slugs
+   * had a prerendered page in the sitemap, so each was an address a crawler had been offered and may
+   * have ranked. A rename with no redirect turns those into SOFT 404s specifically — the catch-all
+   * `location /journal/` hands back the app shell with a 200, the shell finds no such tag and
+   * renders its empty state, and nothing in the response says the address moved.
+   *
+   * Two halves, and the second is the one that rots: the redirect has to exist, AND its target has
+   * to be a slug `TAGS` still contains. A later rename that forgets these lines would leave five
+   * permanent redirects pointing at nothing, which is worse than the 404 they were added to prevent.
+   */
+  const RENAMED = {
+    'starting-out': 'explainers',
+    'staying-safe': 'security',
+    hearth: 'how-things-work',
+    ecosystem: 'what-we-build',
+    'living-with-it': 'field-notes',
+  }
+  const slugs = new Set(TAGS.map((t) => t.slug))
+  for (const [was, now] of Object.entries(RENAMED)) {
+    assert.ok(
+      new RegExp(
+        `location = /journal/topics/${was}\\s*\\{\\s*return 301 /journal/topics/${now};`,
+      ).test(nginx),
+      `/topics/${was} has no 301 to /topics/${now}`,
+    )
+    assert.ok(slugs.has(now), `/topics/${was} redirects to /topics/${now}, which is not a tag`)
+  }
+  // And no old slug survives in the tag table, which would make the redirect shadow a live page.
+  for (const was of Object.keys(RENAMED)) {
+    assert.ok(!slugs.has(was), `${was} is both redirected away and still a tag`)
+  }
 })

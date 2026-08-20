@@ -10,7 +10,7 @@ export const article: Article = {
   authorId: 'cloudsforge',
   publishedAt: '2026-08-11',
   updatedAt: null,
-  tags: ['ecosystem', 'starting-out'],
+  tags: ['what-we-build', 'explainers'],
   hero: {
     src: '/articles/a-tour-of-cloudsforge/hero.png',
     alt: 'A drawing of six tools standing in a row on one bronze rule, each a different colour, each labelled with the name of a CloudsForge product.',

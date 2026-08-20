@@ -12,40 +12,56 @@
  */
 import type { Tag } from './types.ts'
 
+/*
+ * ── WHY THESE SIX, AND NOT THE SIX THAT WERE HERE ────────────────────────────────────────────────
+ *
+ * The first set was named after the first ten articles rather than after the publication: `hearth`,
+ * `ecosystem` and `living-with-it` were three ways of saying CloudsForge, and `starting-out` and
+ * `staying-safe` between them described a beginner's crypto-safety guide. That is a fair account of
+ * what had been written by August 2026 and a poor one of what this is for — every piece that was not
+ * about losing coins or about our own products had nowhere to sit, so the taxonomy would have had to
+ * grow a new page each time the subject moved. A closed set that needs opening is not closed.
+ *
+ * These six are named after the KIND of piece rather than its subject, which is the property that
+ * makes them last: an explainer is an explainer whether it is about seed phrases or settlement
+ * batching, and `what-we-build` holds anything of ours without naming which product exists this
+ * quarter. Only `the-wider-world` survives unchanged — it was already about a kind, not a topic.
+ */
 export const TAGS: readonly Tag[] = [
   {
-    slug: 'starting-out',
-    name: 'Starting out',
+    slug: 'explainers',
+    name: 'Explainers',
     blurb:
-      'For anyone who has heard about crypto for years and never found an explanation that assumed nothing.',
+      'For anyone who has heard a thing referred to for years and never found an explanation that assumed nothing.',
   },
   {
-    slug: 'staying-safe',
-    name: 'Staying safe',
+    slug: 'security',
+    name: 'Security',
     blurb:
-      'How people actually lose money in crypto, and the small habits that prevent nearly all of it.',
+      'How people actually lose money and access, and the small habits that prevent nearly all of it.',
   },
   {
-    slug: 'hearth',
-    name: 'Hearth',
-    blurb: 'The chain CloudsForge runs, why it exists, and what it is and is not good at.',
-  },
-  {
-    slug: 'ecosystem',
-    name: 'The ecosystem',
-    blurb: 'What each part of CloudsForge is for, and how the pieces fit together.',
-  },
-  {
-    slug: 'living-with-it',
-    name: 'Living with it',
+    slug: 'how-things-work',
+    name: 'How things work',
     blurb:
-      'The part nobody writes about: what holding a volatile thing does to your week, and how to hold it without it holding you.',
+      'The mechanism underneath, taken apart slowly: what the system is really doing, and what it is and is not good at.',
+  },
+  {
+    slug: 'what-we-build',
+    name: 'What we build',
+    blurb: 'Our own work — what we built, what it is for, and what we got wrong on the way.',
+  },
+  {
+    slug: 'field-notes',
+    name: 'Field notes',
+    blurb:
+      'The part nobody writes down: what running and using this stuff is actually like, week to week.',
   },
   {
     slug: 'the-wider-world',
     name: 'The wider world',
     blurb:
-      'What happened on somebody else\'s chain, in somebody else\'s filings, read by people who run one and have to make the same decisions.',
+      'What happened in somebody else\'s system, in somebody else\'s filings, read by people who run one and have to make the same decisions.',
   },
 ]
 

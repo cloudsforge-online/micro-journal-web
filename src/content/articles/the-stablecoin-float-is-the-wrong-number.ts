@@ -9,7 +9,7 @@ export const article: Article = {
   authorId: 'cloudsforge',
   publishedAt: '2026-08-18',
   updatedAt: null,
-  tags: ['living-with-it', 'the-wider-world'],
+  tags: ['field-notes', 'the-wider-world'],
   hero: {
     src: '/articles/the-stablecoin-float-is-the-wrong-number/hero.png',
     alt: 'A drawing of a shrinking stack of coins beside a wide bronze arc looping back on itself several times.',

@@ -9,7 +9,7 @@ export const article: Article = {
   authorId: 'cloudsforge',
   publishedAt: '2026-08-18',
   updatedAt: null,
-  tags: ['hearth', 'the-wider-world'],
+  tags: ['how-things-work', 'the-wider-world'],
   hero: {
     src: '/articles/the-difficulty-adjustment-is-not-a-safety-net/hero.png',
     alt: 'A drawing of evenly spaced block marks along a rule, above a heavy bronze line that steps down three times and keeps going.',

@@ -9,7 +9,7 @@ export const article: Article = {
   authorId: 'cloudsforge',
   publishedAt: '2026-08-16',
   updatedAt: null,
-  tags: ['staying-safe', 'starting-out'],
+  tags: ['security', 'explainers'],
   hero: {
     src: '/articles/nine-ways-people-lose-crypto/hero.png',
     alt: 'A drawing of nine identical outlined doors in a three-by-three grid, the middle one standing ajar with bronze light spilling out of it.',

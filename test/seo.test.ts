@@ -124,8 +124,8 @@ test('THE STATIC DESCRIPTION IS BYTE-IDENTICAL TO THE ONE REACT WRITES', () => {
   // a truncated search result preserves. Somebody who searches a crypto question and sees a result
   // from a company that sells crypto has already decided what this is; the description is the only
   // thing on the page that gets to argue, and it has about eight words in which to do it.
-  assert.match(SURFACE_DESCRIPTION, /^Plain-language crypto writing/)
-  assert.match(SURFACE_DESCRIPTION, /No jargon, no price talk, nothing to sign up for\.$/)
+  assert.match(SURFACE_DESCRIPTION, /^Writing about technology, money/)
+  assert.match(SURFACE_DESCRIPTION, /No jargon, nothing to sign up for\.$/)
 
   // The og card carries the same sentence, and that is not a duplication to tidy up: the card is
   // read WITHOUT the surrounding page, in a chat window, next to links to services that do hold

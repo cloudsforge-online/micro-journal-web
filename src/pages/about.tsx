@@ -27,18 +27,23 @@ export function AboutPage() {
       <header className="jn-pagehead">
         <h1 className="jn-pagehead__title">About {PUBLICATION}</h1>
         <p className="jn-pagehead__standfirst">
-          A place to explain crypto to people who were never given a straight answer about it, and to
+          A place to explain things properly to people who were never given a straight answer, and to
           write down what CloudsForge is building and why.
         </p>
       </header>
 
       <div className="jn-body jn-body--prose">
         <p className="jn-body__p">
-          Most writing about this subject is aimed at people who already speak the language. It
-          assumes you know what a key is, why a chain has blocks, and what anyone means by custody —
-          and when it does explain, it explains in order to sell you something. This journal is the
-          other thing: plain sentences about how it actually works, what usually goes wrong, and what
-          it is like to hold a thing whose price moves while you sleep.
+          Most writing about the systems people are asked to trust is aimed at people who already
+          speak the language. It assumes you know what a key is, why a chain has blocks, what anyone
+          means by custody or settlement or a float — and when it does explain, it explains in order
+          to sell you something. This journal is the other thing: plain sentences about how it
+          actually works, what usually goes wrong, and what it is like to live with.
+        </p>
+        <p className="jn-body__p">
+          A lot of that has been about crypto, because that is what we build and it is where we know
+          where the bodies are buried. It is not the boundary. Anything with a mechanism worth taking
+          apart, and a gap between what it promises and what it does, belongs here.
         </p>
 
         <h2 className="jn-body__h2" id="who">

@@ -9,7 +9,7 @@ export const article: Article = {
   authorId: 'cloudsforge',
   publishedAt: '2026-07-28',
   updatedAt: null,
-  tags: ['starting-out'],
+  tags: ['explainers'],
   hero: {
     src: '/articles/crypto-without-the-crypto-words/hero.png',
     alt: 'A drawing of a ruled ledger, its rows running off the right edge of the page, with one row lit in bronze.',
