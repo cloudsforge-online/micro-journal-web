@@ -101,7 +101,7 @@ describe('the in-place network view', () => {
       // And the environment is a SUFFIX on the first label rather than a second label: Cloudflare's
       // Universal SSL wildcard matches exactly one, so `explorer.testnet.<apex>` would fail the TLS
       // handshake at the edge before anything in this estate saw the request.
-      assert.equal(viewedHosts().explorer, 'https://explorer-testnet.cloudsforge.online')
+      assert.equal(viewedHosts().explorer, 'https://testnet.cloudsforge.online/explorer')
     })
   })
 
