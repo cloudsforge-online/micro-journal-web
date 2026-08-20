@@ -659,7 +659,7 @@ await page.setContent(
       <div style="position:absolute;left:72px;top:0;height:${CARD.height}px;width:${CARD.width - 144}px;display:flex;flex-direction:column;justify-content:center;gap:22px">
         <p style="font-family:'CF Mono',monospace;font-size:20px;letter-spacing:0.18em;text-transform:uppercase;color:${BRONZE_HOT}">CloudsForge</p>
         <h1 style="font-family:'CF Display',sans-serif;font-weight:600;font-size:96px;line-height:1;letter-spacing:-0.03em;color:#f2f5f7">Forge Journal</h1>
-        <p style="font-family:'CF Sans',sans-serif;font-size:27px;line-height:1.4;color:${TEXT};max-width:760px">Plain-language writing about crypto: what it is, how people lose it, and what we are building on our own chain.</p>
+        <p style="font-family:'CF Sans',sans-serif;font-size:27px;line-height:1.4;color:${TEXT};max-width:760px">Writing about technology, money and the systems people are asked to trust — plainly, with the working shown.</p>
       </div>
     </div>`,
   ),

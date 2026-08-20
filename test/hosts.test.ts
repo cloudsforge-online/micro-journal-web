@@ -211,9 +211,14 @@ test('the description says what the writing IS, and then what it is not', () => 
   // spends its second half denying them, and "nothing to sign up for" is last because it is the
   // clause that decides the click. `test/seo.test.ts` compares this byte for byte with index.html;
   // this checks the sentence itself, which that comparison cannot.
-  assert.ok(SURFACE_DESCRIPTION.startsWith('Plain-language crypto writing'))
+  assert.ok(SURFACE_DESCRIPTION.startsWith('Writing about technology, money'))
   assert.ok(SURFACE_DESCRIPTION.includes('No jargon'))
   assert.ok(SURFACE_DESCRIPTION.includes('nothing to sign up for'))
+  // And it names no single subject. The sentence this replaced promised "crypto … how people lose
+  // it … what CloudsForge builds on its own chain", which is three fences around a publication that
+  // wanted none of them. Asserted as an absence so that a future edit narrowing it back has to
+  // delete this line and say why.
+  assert.ok(!/\bcrypto\b/i.test(SURFACE_DESCRIPTION), 'the description fences the subject again')
   // Under 160 characters, which is where a search result truncates. Not a rule of the estate's — a
   // rule of the surface a search engine renders, which is this repository's whole subject and
   // therefore the one place in the estate where it is worth asserting.

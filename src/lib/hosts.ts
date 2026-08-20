@@ -76,12 +76,18 @@ export const ACCENT_SURFACE = 'journal'
  * publication is presumed guilty of both. "Nothing to sign up for" is last because it is the line
  * that decides the click.
  *
- * IT FITS IN 160 CHARACTERS, which is why it reads "Plain-language crypto writing" rather than the
- * more natural "Plain-language writing about crypto" it was first written as. That version was 177
- * and a search result would have cut it mid-clause — at "No jargon, no price…", which turns the
- * sentence's whole second half into a fragment that reads like a boast rather than a promise. On
- * every other surface this budget is a nicety. Here the search result IS the product's front door,
- * so `test/hosts.test.ts` asserts the length and this comment is why.
+ * IT FITS IN 160 CHARACTERS, which is where a search result truncates. On every other surface that
+ * budget is a nicety; here the search result IS the product's front door, so `test/hosts.test.ts`
+ * asserts the length and this comment is why. The clause order is chosen for the truncated case —
+ * the subject first, the two denials last, so a cut sentence still says what this is before it says
+ * what it is not.
+ *
+ * IT NO LONGER SAYS "CRYPTO", and that is the point of the 2026-08-21 rewrite. The sentence used to
+ * read "Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds
+ * on its own chain" — an accurate description of the first ten articles and a promise the
+ * publication had no reason to make. It named one subject and two sub-subjects, so anything written
+ * outside them would have contradicted the front door. "Technology, money and the systems people
+ * are asked to trust" covers what has been published and does not fence off what has not.
  *
  * `test/seo.test.ts` compares this byte for byte with the description meta in `index.html`, so the
  * copy a link-preview fetcher gets — those generally do not execute JavaScript — cannot drift from
@@ -90,8 +96,8 @@ export const ACCENT_SURFACE = 'journal'
  * same test walks `dist` to confirm each one came from the article rather than from this default.
  */
 export const SURFACE_DESCRIPTION =
-  'Plain-language crypto writing: what it is, how people lose it, and what CloudsForge builds on ' +
-  'its own chain. No jargon, no price talk, nothing to sign up for.'
+  'Writing about technology, money and the systems people are asked to trust — plainly, with the ' +
+  'working shown. No jargon, nothing to sign up for.'
 
 /** The same four names `cloudsforgeHosts()` treats as development. Kept in step by test. */
 export function isLocal(hostname: string): boolean {

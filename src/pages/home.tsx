@@ -33,12 +33,11 @@ export function HomePage() {
       */}
       <header className="jn-hero">
         <p className="jn-hero__eyebrow">{PUBLICATION}</p>
-        <h1 className="jn-hero__title">
-          Crypto, written down plainly, by the people building some of it
-        </h1>
+        <h1 className="jn-hero__title">Things worth explaining properly</h1>
         <p className="jn-hero__standfirst">
-          No price talk, no jargon you have to look up, and nothing to sign up for. When we write
-          about our own products we say so.
+          Writing about technology, money and the systems people are asked to trust — plainly, with
+          the working shown. No jargon you have to look up, nothing to sign up for, and when we
+          write about our own products we say so.
         </p>
       </header>
 

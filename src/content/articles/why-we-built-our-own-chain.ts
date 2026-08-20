@@ -10,7 +10,7 @@ export const article: Article = {
   authorId: 'cloudsforge',
   publishedAt: '2026-08-04',
   updatedAt: null,
-  tags: ['hearth', 'ecosystem'],
+  tags: ['how-things-work', 'what-we-build'],
   hero: {
     src: '/articles/why-we-built-our-own-chain/hero.png',
     alt: 'A drawing of thirteen identical blocks standing at even spacing on one line, each throwing a single spark upward, brightening from left to right.',

@@ -9,7 +9,7 @@ export const article: Article = {
   authorId: 'cloudsforge',
   publishedAt: '2026-08-14',
   updatedAt: null,
-  tags: ['living-with-it'],
+  tags: ['field-notes'],
   hero: {
     src: '/articles/the-healthy-way-to-hold-crypto/hero.png',
     alt: 'A drawing of a jagged line that thrashes up and down, then flattens into a straight rule and ends at a single glowing point at rest.',

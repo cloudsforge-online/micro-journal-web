@@ -598,10 +598,33 @@ jobs:
           # ── every address a reader can be given, cold ──────────────────────────────────────────
           # These are links pasted into conversations and returned by search engines; every one of
           # them is somebody's FIRST arrival, with no client router warmed up to rescue it.
-          for owned in / /about /topics /topics/starting-out /search \
+          for owned in / /about /topics /topics/explainers /search \
                        /a/nine-ways-people-lose-crypto /a/the-healthy-way-to-hold-crypto; do
             got=$(status "$owned")
             [ "$got" = "200" ] || { echo "::error::$owned returned $got"; fail=1; }
+          done
+
+          # ── and the five topic slugs that were renamed on 2026-08-21 ──────────────────────────
+          # Each was a prerendered page in the sitemap, so each is an address a crawler was offered.
+          # Both halves matter and only the image can check the second: the status must be 301, AND
+          # the Location must land somewhere that actually answers 200. A redirect to a slug that no
+          # longer exists is worse than the 404 it replaced, because it looks deliberate.
+          # `location` matches by SUFFIX, not equality: `absolute_redirect` is on by default, so
+          # nginx may answer either `/journal/topics/x` or `http://<host>/journal/topics/x` and both
+          # are correct. The suffix is the part this check is actually about.
+          location() { curl -s -m 5 -o /dev/null -w '%{redirect_url}' -H "Host: $host" "http://127.0.0.1:8080$BASE$1" || true; }
+          for pair in starting-out:explainers staying-safe:security hearth:how-things-work \
+                      ecosystem:what-we-build living-with-it:field-notes; do
+            was=${pair%%:*}; now=${pair##*:}
+            got=$(status "/topics/$was")
+            [ "$got" = "301" ] || { echo "::error::/topics/$was returned $got, expected a 301"; fail=1; }
+            loc=$(location "/topics/$was")
+            case "$loc" in
+              *"$BASE/topics/$now") ;;
+              *) echo "::error::/topics/$was redirects to '$loc', expected it to end $BASE/topics/$now"; fail=1 ;;
+            esac
+            got=$(status "/topics/$now")
+            [ "$got" = "200" ] || { echo "::error::/topics/$now is a redirect target and returned $got"; fail=1; }
           done
 
           # ── and the addresses that are not addresses ───────────────────────────────────────────
@@ -672,7 +695,7 @@ jobs:
             *) echo "::error::the feed is served as '${feed_type:-nothing}'; some readers refuse text/xml"; fail=1 ;;
           esac
           sitemap=$(get /sitemap.xml)
-          for path in /a/nine-ways-people-lose-crypto /topics/starting-out /about; do
+          for path in /a/nine-ways-people-lose-crypto /topics/explainers /about; do
             case "$sitemap" in
               *"<loc>https://$host$BASE$path</loc>"*) ;;
               *) echo "::error::$BASE$path is not in the sitemap"; fail=1 ;;
